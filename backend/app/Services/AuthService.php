@@ -1,0 +1,136 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services;
+
+use App\Config\AppConfig;
+use App\Http\Response;
+use App\Models\User;
+use App\Repositories\UserRepository;
+use App\Utils\JwtUtil;
+use App\Utils\UserValidation;
+use Psr\Log\LoggerInterface;
+
+class AuthService
+{
+    public function __construct(
+        private readonly UserRepository $userRepository,
+        private readonly LoggerInterface $logger,
+    ) {}
+
+    public function register(string $username, string $email, string $password, string $passwordReminder): User
+    {
+        if (!AppConfig::isRegistrationEnabled()) {
+            Response::forbidden('Registration is currently disabled');
+            exit;
+        }
+
+        $errors = UserValidation::validateRegistration($username, $email, $password);
+        if ($errors !== []) {
+            Response::validationError(implode(' ', $errors));
+            exit;
+        }
+
+        if ($this->userRepository->findByUsername($username) !== null) {
+            Response::conflict('Username already taken');
+            exit;
+        }
+
+        if ($this->userRepository->findByEmail($email) !== null) {
+            Response::conflict('Email already registered');
+            exit;
+        }
+
+        $passwordHash = UserValidation::hashPassword($password);
+
+        $settings = [
+            'theme_mode' => 'light',
+            'date_format' => 'MM/DD/YYYY',
+            'user_alias' => $username,
+        ];
+
+        return $this->userRepository->create($username, $email, $passwordHash, $settings);
+    }
+
+    public function login(string $username, string $password): array
+    {
+        $user = $this->userRepository->findByUsername($username);
+
+        if ($user === null || !password_verify($password, $user->getPasswordHash())) {
+            Response::unauthorized('Invalid username or password');
+            exit;
+        }
+
+        $token = JwtUtil::generateToken($user->id, $user->username);
+
+        $userData = $user->toArray();
+        $userData['is_admin'] = AppConfig::isAdminUsername($user->username);
+
+        return [
+            'token' => $token,
+            'user' => $userData,
+        ];
+    }
+
+    public function getMe(int $userId): array
+    {
+        $user = $this->userRepository->findById($userId);
+
+        if ($user === null) {
+            Response::notFound('User not found');
+            exit;
+        }
+
+        $data = $user->toArray();
+        $data['is_admin'] = AppConfig::isAdminUsername($user->username);
+
+        return $data;
+    }
+
+    public function updateSettings(int $userId, array $partial): array
+    {
+        $allowed = ['theme_mode', 'date_format', 'user_alias'];
+        $filtered = [];
+
+        foreach ($partial as $key => $value) {
+            if (in_array($key, $allowed, true)) {
+                $filtered[$key] = trim((string) $value);
+            }
+        }
+
+        if ($filtered === []) {
+            Response::validationError('No valid settings keys provided');
+            exit;
+        }
+
+        if (isset($filtered['user_alias'])) {
+            $alias = $filtered['user_alias'];
+            if ($alias === '' || !preg_match('/^[a-zA-Z0-9]+$/', $alias)) {
+                Response::validationError('User alias must be alphanumeric');
+                exit;
+            }
+            if (mb_strlen($alias) > 40) {
+                Response::validationError('User alias must be 40 characters or fewer');
+                exit;
+            }
+        }
+
+        if (isset($filtered['theme_mode']) && !in_array($filtered['theme_mode'], ['light', 'dark'], true)) {
+            Response::validationError('Theme mode must be light or dark');
+            exit;
+        }
+
+        if (isset($filtered['date_format']) && !in_array($filtered['date_format'], ['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'], true)) {
+            Response::validationError('Invalid date format');
+            exit;
+        }
+
+        $settings = $this->userRepository->updateSettings($userId, $filtered);
+
+        $this->logger->info('Settings updated', ['user_id' => $userId, 'changes' => $filtered]);
+
+        return $settings;
+    }
+
+}

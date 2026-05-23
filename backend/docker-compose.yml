@@ -1,0 +1,30 @@
+version: '3.7'
+
+services:
+    flight:
+        image: php:8-cli-alpine
+        working_dir: /var/www
+        command: >
+            sh -c "docker-php-ext-install pdo pdo_mysql > /dev/null 2>&1 &&
+            php -S 0.0.0.0:8080 -t public"
+        environment:
+            docker: "true"
+        ports:
+            - "8080:8080"
+        volumes:
+            - .:/var/www
+        depends_on:
+            - mysql
+
+    mysql:
+        image: mysql:8.0
+        environment:
+            MYSQL_ROOT_PASSWORD: root
+            MYSQL_DATABASE: app
+        ports:
+            - "3306:3306"
+        volumes:
+            - mysql_data:/var/lib/mysql
+
+volumes:
+    mysql_data:

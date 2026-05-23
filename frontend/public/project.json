@@ -1,0 +1,13 @@
+{
+  "name": "Flight React App",
+  "desc": "PHP Flight + React starter with JWT auth, settings, and admin user management",
+  "img": "./app/app.png",
+  "link": "/app/",
+  "updated": "2026-05-23",
+  "tags": [
+    "php",
+    "flight",
+    "react",
+    "MUI"
+  ]
+}
