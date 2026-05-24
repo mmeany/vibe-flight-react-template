@@ -2,8 +2,8 @@ import {
   Dashboard as DashboardIcon,
   Logout as LogoutIcon,
   Menu as MenuIcon,
-  Settings as SettingsIcon,
   People as PeopleIcon,
+  Settings as SettingsIcon,
 } from '@mui/icons-material';
 import {
   AppBar,
@@ -27,9 +27,8 @@ import {
   useMediaQuery,
   useTheme as useMuiTheme,
 } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
-import { fetchProjectMeta } from '../api/projectMeta';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Header() {
@@ -38,17 +37,10 @@ export default function Header() {
   const muiTheme = useMuiTheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('sm'));
 
-  const [appName, setAppName] = useState('Flight React App');
+  const appName = 'Flight React App';
   const [anchorEl, setAnchorEl] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
-
-  useEffect(() => {
-    fetchProjectMeta().then(meta => {
-      setAppName(meta.name);
-      document.title = meta.name;
-    });
-  }, []);
 
   const handleAvatarClick = (event) => setAnchorEl(event.currentTarget);
   const handleMenuClose = () => setAnchorEl(null);
