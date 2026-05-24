@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 usage() {
     echo "Usage: $0 [--base PATH] [--run-tests]"
     echo
-    echo "  --base PATH      Subdirectory base path for deployment (default: /scanner/)"
+    echo "  --base PATH      Subdirectory base path for deployment (default: /app/)"
     echo "  --run-tests      Run frontend and backend tests before building"
     echo "  --help, -h       Show this help"
     exit 1

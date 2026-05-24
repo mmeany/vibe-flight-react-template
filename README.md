@@ -12,11 +12,21 @@ Monorepo template: **PHP Flight** API (`/backend`) + **React** SPA (`/frontend`)
 
 ## Starting a new project
 
-1. Copy or clone this repository.
-2. Set branding in `frontend/public/project.json` (`name` drives the header and browser tab title).
-3. Update `frontend/index.html` favicon links and replace files under `frontend/public/`.
-4. Create a MySQL database and configure `backend/.env` (copy from `backend/.env.example`).
-5. Build for your URL path: `./build.sh --base /your-path/` (see [DEPLOY.md](DEPLOY.md)).
+Use the [`new-vibe`](https://github.com/mmeany/vibe-new-vibe) scaffold (recommended):
+
+```bash
+new-vibe   # installs from ~/bin; see vibe-new-vibe README
+```
+
+Or clone this template manually, then:
+
+1. Set branding in `frontend/public/project.json` and `frontend/index.html`.
+2. Set default deploy base in `build.sh` (`BASE=`) and match `project.json` → `link`.
+3. Update favicons under `frontend/public/` and add the image path from `project.json` → `img`.
+4. Copy `backend/.env.example` to `backend/.env` and configure MySQL + `JWT_SECRET`.
+5. Build: `./build.sh --base /your-path/` (see [DEPLOY.md](DEPLOY.md)).
+
+Cursor project skill: `.cursor/skills/mvm-flight-react/`.
 
 ## Development
 
