@@ -1,3 +1,3 @@
-username,email,password,user_alias
-tester1,tester1@example.com,Password1,TesterOne
-tester2,tester2@example.com,Password2,
+username,email,password,password_reminder,user_alias
+tester1,tester1@example.com,Password1,My pet name,TesterOne
+tester2,tester2@example.com,Password2,High school city,

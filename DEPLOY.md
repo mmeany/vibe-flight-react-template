@@ -19,7 +19,7 @@ This app is deployed as a single `dist/` bundle under a URL subdirectory (defaul
 
 **Database**
 
-- Create an empty database and a MySQL user with full privileges on that database before first deploy (migrations run automatically on first API boot).
+- Create an empty database and a MySQL user with full privileges on that database before first deploy (migrations run automatically on first API boot). Existing databases gain a `password_reminder` column on boot via idempotent `ALTER TABLE` (default `No hint`).
 
 ## Build locally
 
@@ -154,8 +154,8 @@ Password hashes must use PHP `password_hash()` (bcrypt), same as the application
 1. Log in as an allowlisted admin.
 2. Open **Users** in the header menu (visible only when `is_admin` is true).
 3. Use one of:
-   - **Create** — single user: username, email, password, optional alias.
-   - **Import CSV** — batch upload. Required columns: `username`, `email`, `password`. Optional: `user_alias` (defaults to username if empty).
+   - **Create** — single user: username, email, password, password reminder, optional alias.
+   - **Import CSV** — batch upload. Required columns: `username`, `email`, `password`, `password_reminder`. Optional: `user_alias` (defaults to username if empty).
    - **Manage** — list, edit, deactivate (soft-delete), or restore users. Toggle **Show inactive** to see deactivated accounts.
 
 Admin create/import **ignores** `REGISTRATION_ENABLED` and uses the same password rules as public registration (8+ characters, upper, lower, digit).

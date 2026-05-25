@@ -26,6 +26,7 @@ class UserTest extends TestCase
         $this->assertSame('DD/MM/YYYY', $array['settings']['date_format']);
         $this->assertSame('Test', $array['settings']['user_alias']);
         $this->assertArrayNotHasKey('password_hash', $array);
+        $this->assertSame('No hint', $array['password_reminder']);
     }
 
     public function testSettingsDefaultToNull(): void

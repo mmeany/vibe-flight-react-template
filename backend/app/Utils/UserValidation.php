@@ -40,11 +40,31 @@ class UserValidation
         return $errors;
     }
 
-    public static function validateRegistration(string $username, string $email, string $password): array
+    public static function validatePasswordReminder(string $passwordReminder): array
     {
+        $errors = [];
+        $trimmed = trim($passwordReminder);
+
+        if ($trimmed === '') {
+            $errors[] = 'Password reminder is required.';
+        }
+        if (mb_strlen($trimmed) > 255) {
+            $errors[] = 'Password reminder must be 255 characters or fewer.';
+        }
+
+        return $errors;
+    }
+
+    public static function validateRegistration(
+        string $username,
+        string $email,
+        string $password,
+        string $passwordReminder,
+    ): array {
         return array_merge(
             self::validateUsernameEmail($username, $email),
             self::validatePassword($password),
+            self::validatePasswordReminder($passwordReminder),
         );
     }
 

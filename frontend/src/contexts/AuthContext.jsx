@@ -28,8 +28,17 @@ export function AuthProvider({ children }) {
     if (storedToken) {
       (async () => {
         try {
-          const { getMe } = await import('../api/me');
-          const data = await getMe();
+          const { getMe, updateSettings: updateSettingsApi } = await import('../api/me');
+          const { getBrowserTimezone } = await import('../utils/date');
+          let data = await getMe();
+          if (!data.settings?.timezone) {
+            try {
+              const result = await updateSettingsApi('timezone', getBrowserTimezone());
+              data = { ...data, settings: result.settings };
+            } catch {
+              // keep going without persisted timezone
+            }
+          }
           localStorage.setItem(USER_KEY, JSON.stringify(data));
           setState({
             user: data,
@@ -50,12 +59,23 @@ export function AuthProvider({ children }) {
     setState(prev => ({ ...prev, isLoading: true }));
     try {
       const { login: loginApi } = await import('../api/auth');
+      const { updateSettings: updateSettingsApi } = await import('../api/me');
+      const { getBrowserTimezone } = await import('../utils/date');
       const response = await loginApi(username, password);
       if (response.error) throw new Error(response.error.message);
+      let user = response.data.user;
+      if (!user.settings?.timezone) {
+        try {
+          const result = await updateSettingsApi('timezone', getBrowserTimezone());
+          user = { ...user, settings: result.settings };
+        } catch {
+          // continue without persisted timezone
+        }
+      }
       localStorage.setItem(TOKEN_KEY, response.data.token);
-      localStorage.setItem(USER_KEY, JSON.stringify(response.data.user));
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
       setState({
-        user: response.data.user,
+        user,
         token: response.data.token,
         isLoading: false,
         isAuthenticated: true,
@@ -90,9 +110,11 @@ export function AuthProvider({ children }) {
     const result = await updateSettingsApi(key, value);
     setState(prev => {
       if (!prev.user) return prev;
+      const updated = { ...prev.user, settings: result.settings };
+      localStorage.setItem(USER_KEY, JSON.stringify(updated));
       return {
         ...prev,
-        user: { ...prev.user, settings: result.settings },
+        user: updated,
       };
     });
   }, []);

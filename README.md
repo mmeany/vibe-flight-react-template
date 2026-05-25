@@ -61,7 +61,13 @@ npm run dev
 
 Admin create/import always works for allowlisted admins, regardless of `REGISTRATION_ENABLED`.
 
-CSV template: [docs/admin-users.csv.example](docs/admin-users.csv.example).
+CSV template: [docs/admin-users.csv.example](docs/admin-users.csv.example). Required columns include `password_reminder` (breaking change vs older three-column CSVs).
+
+### Settings, Help, and About
+
+- **Settings** (`/settings`) — theme, date format, display alias, timezone, and self-service password change with password reminder.
+- **Help** (`/help`) — in-app documentation (topic picker and prev/next navigation).
+- **About** (`/about`) — app description and version; customize copy in `frontend/src/about/aboutContent.js`.
 
 ## Production build
 

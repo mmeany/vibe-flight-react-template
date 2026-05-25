@@ -17,43 +17,21 @@ class UserAdminService
         private readonly LoggerInterface $logger,
     ) {}
 
-    public function createUser(string $username, string $email, string $password, ?string $userAlias = null): User
-    {
-        $username = trim($username);
-        $email = trim($email);
-        $alias = trim($userAlias ?? '') !== '' ? trim($userAlias) : $username;
-
-        $errors = UserValidation::validateRegistration($username, $email, $password);
-        if ($errors !== []) {
-            Response::validationError(implode(' ', $errors));
+    public function createUser(
+        string $username,
+        string $email,
+        string $password,
+        string $passwordReminder,
+        ?string $userAlias = null,
+    ): User {
+        try {
+            $user = $this->createUserWithoutExit($username, $email, $password, $passwordReminder, $userAlias);
+        } catch (\InvalidArgumentException $e) {
+            Response::validationError($e->getMessage());
             exit;
         }
 
-        $aliasError = UserValidation::validateUserAlias($alias);
-        if ($aliasError !== null) {
-            Response::validationError($aliasError);
-            exit;
-        }
-
-        if ($this->userRepository->findByUsername($username) !== null) {
-            Response::conflict('Username already taken');
-            exit;
-        }
-
-        if ($this->userRepository->findByEmail($email) !== null) {
-            Response::conflict('Email already registered');
-            exit;
-        }
-
-        $passwordHash = UserValidation::hashPassword($password);
-        $settings = [
-            'theme_mode' => 'light',
-            'date_format' => 'MM/DD/YYYY',
-            'user_alias' => $alias,
-        ];
-
-        $user = $this->userRepository->create($username, $email, $passwordHash, $settings);
-        $this->logger->info('Admin created user', ['user_id' => $user->id, 'username' => $username]);
+        $this->logger->info('Admin created user', ['user_id' => $user->id, 'username' => $user->username]);
 
         return $user;
     }
@@ -80,7 +58,7 @@ class UserAdminService
             str_getcsv($headerLine)
         );
 
-        $required = ['username', 'email', 'password'];
+        $required = ['username', 'email', 'password', 'password_reminder'];
         foreach ($required as $col) {
             if (!in_array($col, $headers, true)) {
                 Response::validationError("CSV must include column: $col");
@@ -108,10 +86,17 @@ class UserAdminService
             $username = $row['username'] ?? '';
             $email = $row['email'] ?? '';
             $password = $row['password'] ?? '';
+            $passwordReminder = $row['password_reminder'] ?? '';
             $userAlias = $row['user_alias'] ?? '';
 
             try {
-                $user = $this->createUserWithoutExit($username, $email, $password, $userAlias !== '' ? $userAlias : null);
+                $user = $this->createUserWithoutExit(
+                    $username,
+                    $email,
+                    $password,
+                    $passwordReminder,
+                    $userAlias !== '' ? $userAlias : null,
+                );
                 $created++;
                 $rows[] = [
                     'line' => $lineNumber,
@@ -163,6 +148,7 @@ class UserAdminService
         string $email,
         ?string $password,
         ?string $userAlias,
+        ?string $passwordReminder,
         int $actingUserId,
     ): User {
         $user = $this->getUser($id);
@@ -212,7 +198,24 @@ class UserAdminService
             ? UserValidation::hashPassword($password)
             : $user->getPasswordHash();
 
-        $updated = $this->userRepository->update($id, $username, $email, $passwordHash, $settings);
+        $reminderToStore = $user->password_reminder;
+        if ($passwordReminder !== null) {
+            $reminderErrors = UserValidation::validatePasswordReminder($passwordReminder);
+            if ($reminderErrors !== []) {
+                Response::validationError(implode(' ', $reminderErrors));
+                exit;
+            }
+            $reminderToStore = trim($passwordReminder);
+        }
+
+        $updated = $this->userRepository->update(
+            $id,
+            $username,
+            $email,
+            $passwordHash,
+            $reminderToStore,
+            $settings,
+        );
         $this->logger->info('Admin updated user', ['user_id' => $id, 'acting_user_id' => $actingUserId]);
 
         return $updated;
@@ -255,13 +258,15 @@ class UserAdminService
         string $username,
         string $email,
         string $password,
+        string $passwordReminder,
         ?string $userAlias = null,
     ): User {
         $username = trim($username);
         $email = trim($email);
         $alias = trim($userAlias ?? '') !== '' ? trim($userAlias) : $username;
+        $reminder = trim($passwordReminder);
 
-        $errors = UserValidation::validateRegistration($username, $email, $password);
+        $errors = UserValidation::validateRegistration($username, $email, $password, $reminder);
         if ($errors !== []) {
             throw new \InvalidArgumentException(implode(' ', $errors));
         }
@@ -286,6 +291,6 @@ class UserAdminService
             'user_alias' => $alias,
         ];
 
-        return $this->userRepository->create($username, $email, $passwordHash, $settings);
+        return $this->userRepository->create($username, $email, $passwordHash, $reminder, $settings);
     }
 }

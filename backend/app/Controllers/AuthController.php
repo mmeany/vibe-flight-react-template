@@ -51,4 +51,17 @@ class AuthController
         $settings = $this->authService->updateSettings($userId, $body);
         Response::success(['settings' => $settings]);
     }
+
+    public function changePassword(): void
+    {
+        $userId = (int) ($_REQUEST['user_id'] ?? 0);
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $currentPassword = $body['current_password'] ?? '';
+        $newPassword = $body['new_password'] ?? '';
+        $passwordReminder = $body['password_reminder'] ?? '';
+
+        $this->authService->changePassword($userId, $currentPassword, $newPassword, $passwordReminder);
+        Response::success(['message' => 'Password updated']);
+    }
 }

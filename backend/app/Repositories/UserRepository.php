@@ -14,17 +14,24 @@ class UserRepository
         private readonly Database $db,
     ) {}
 
-    public function create(string $username, string $email, string $passwordHash, ?array $settings = null): User
-    {
+    public function create(
+        string $username,
+        string $email,
+        string $passwordHash,
+        string $passwordReminder,
+        ?array $settings = null,
+    ): User {
         $settingsJson = $settings !== null ? json_encode($settings) : '{}';
 
         $stmt = $this->db->getPdo()->prepare(
-            'INSERT INTO users (username, email, password_hash, settings) VALUES (:username, :email, :password_hash, :settings)'
+            'INSERT INTO users (username, email, password_hash, password_reminder, settings)
+             VALUES (:username, :email, :password_hash, :password_reminder, :settings)'
         );
         $stmt->execute([
             ':username' => $username,
             ':email' => $email,
             ':password_hash' => $passwordHash,
+            ':password_reminder' => $passwordReminder,
             ':settings' => $settingsJson,
         ]);
 
@@ -35,8 +42,28 @@ class UserRepository
             username: $username,
             email: $email,
             password_hash: $passwordHash,
+            password_reminder: $passwordReminder,
             settings: $settings,
         );
+    }
+
+    public function updatePassword(int $userId, string $passwordHash, string $passwordReminder): User
+    {
+        $stmt = $this->db->getPdo()->prepare(
+            'UPDATE users SET password_hash = :password_hash, password_reminder = :password_reminder WHERE id = :id'
+        );
+        $stmt->execute([
+            ':password_hash' => $passwordHash,
+            ':password_reminder' => $passwordReminder,
+            ':id' => $userId,
+        ]);
+
+        $user = $this->findById($userId);
+        if ($user === null) {
+            throw new \RuntimeException('User not found after password update');
+        }
+
+        return $user;
     }
 
     public function findById(int $id): ?User
@@ -134,15 +161,18 @@ class UserRepository
         string $username,
         string $email,
         string $passwordHash,
+        string $passwordReminder,
         array $settings,
     ): User {
         $stmt = $this->db->getPdo()->prepare(
-            'UPDATE users SET username = :username, email = :email, password_hash = :password_hash, settings = :settings WHERE id = :id'
+            'UPDATE users SET username = :username, email = :email, password_hash = :password_hash,
+             password_reminder = :password_reminder, settings = :settings WHERE id = :id'
         );
         $stmt->execute([
             ':username' => $username,
             ':email' => $email,
             ':password_hash' => $passwordHash,
+            ':password_reminder' => $passwordReminder,
             ':settings' => json_encode($settings),
             ':id' => $id,
         ]);
@@ -181,6 +211,7 @@ class UserRepository
             username: $row['username'],
             email: $row['email'],
             password_hash: $row['password_hash'],
+            password_reminder: $row['password_reminder'] ?? 'No hint',
             created_at: $row['created_at'] ?? '',
             settings: is_array($settings) ? $settings : null,
             deleted_at: $deletedAt !== null ? (string) $deletedAt : null,

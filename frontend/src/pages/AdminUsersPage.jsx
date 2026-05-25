@@ -1,4 +1,11 @@
 import {
+  Cancel,
+  CheckCircle,
+  Delete,
+  Edit,
+  Restore,
+} from '@mui/icons-material';
+import {
   Alert,
   Box,
   Button,
@@ -9,16 +16,20 @@ import {
   DialogTitle,
   Divider,
   FormControlLabel,
+  IconButton,
   Paper,
   Tab,
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   Tabs,
   TextField,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -34,6 +45,7 @@ function CreateUserForm({ onCreated }) {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordReminder, setPasswordReminder] = useState('');
   const [userAlias, setUserAlias] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -49,12 +61,14 @@ function CreateUserForm({ onCreated }) {
         username,
         email,
         password,
+        password_reminder: passwordReminder.trim(),
         user_alias: userAlias || undefined,
       });
       setSuccess(`User "${username}" created.`);
       setUsername('');
       setEmail('');
       setPassword('');
+      setPasswordReminder('');
       setUserAlias('');
       onCreated();
     } catch (err) {
@@ -72,7 +86,22 @@ function CreateUserForm({ onCreated }) {
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 400 }}>
         <TextField label="Username" value={username} onChange={e => setUsername(e.target.value)} required />
         <TextField label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-        <TextField label="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+        <TextField
+          label="Password"
+          type="password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          required
+          helperText="Min 8 chars with uppercase, lowercase, and number"
+        />
+        <TextField
+          label="Password reminder"
+          value={passwordReminder}
+          onChange={e => setPasswordReminder(e.target.value)}
+          required
+          inputProps={{ maxLength: 255 }}
+          helperText="A personal hint to help the user remember their password"
+        />
         <TextField label="User alias (optional)" value={userAlias} onChange={e => setUserAlias(e.target.value)} />
         <Button type="submit" variant="contained" disabled={submitting}>
           {submitting ? 'Creating...' : 'Create user'}
@@ -112,7 +141,7 @@ function CsvImportPanel({ onImported }) {
     <Paper sx={{ p: 3 }} component="form" onSubmit={handleImport}>
       <Typography variant="h6" gutterBottom>Import CSV</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Required columns: username, email, password. Optional: user_alias.
+        Required columns: username, email, password, password_reminder. Optional: user_alias.
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         The CSV file MUST have a header row:
@@ -135,7 +164,7 @@ function CsvImportPanel({ onImported }) {
           overflowX: 'auto',
         }}
       >
-        username,email,password,user_alias
+        username,email,password,password_reminder,user_alias
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Use 'CHOOSE CSV' to select a CSV file, then 'IMPORT' to import it.
@@ -186,6 +215,7 @@ function EditUserDialog({ user, open, onClose, onSaved }) {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordReminder, setPasswordReminder] = useState('');
   const [userAlias, setUserAlias] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -195,6 +225,7 @@ function EditUserDialog({ user, open, onClose, onSaved }) {
       setUsername(user.username);
       setEmail(user.email);
       setPassword('');
+      setPasswordReminder(user.password_reminder ?? 'No hint');
       setUserAlias(user.settings?.user_alias || user.username);
       setError('');
     }
@@ -208,6 +239,7 @@ function EditUserDialog({ user, open, onClose, onSaved }) {
         username,
         email,
         password: password || undefined,
+        password_reminder: passwordReminder.trim(),
         user_alias: userAlias,
       });
       onSaved();
@@ -234,6 +266,14 @@ function EditUserDialog({ user, open, onClose, onSaved }) {
             onChange={e => setPassword(e.target.value)}
             fullWidth
           />
+          <TextField
+            label="Password reminder"
+            value={passwordReminder}
+            onChange={e => setPasswordReminder(e.target.value)}
+            fullWidth
+            required
+            inputProps={{ maxLength: 255 }}
+          />
           <TextField label="User alias" value={userAlias} onChange={e => setUserAlias(e.target.value)} fullWidth />
         </Box>
       </DialogContent>
@@ -248,11 +288,15 @@ function EditUserDialog({ user, open, onClose, onSaved }) {
 }
 
 function UsersTable() {
+  const theme = useTheme();
+  const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const [users, setUsers] = useState([]);
   const [includeInactive, setIncludeInactive] = useState(false);
   const [error, setError] = useState('');
   const [editUser, setEditUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const compactCellSx = isSmallScreen ? { py: 0.5, fontSize: '0.8125rem' } : undefined;
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -293,8 +337,17 @@ function UsersTable() {
   }
 
   return (
-    <Paper sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+    <Paper sx={{ p: { xs: 1.5, sm: 3 } }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          justifyContent: 'space-between',
+          alignItems: { xs: 'stretch', sm: 'center' },
+          gap: { xs: 0.5, sm: 0 },
+          mb: { xs: 1, sm: 2 },
+        }}
+      >
         <Typography variant="h6">Manage users</Typography>
         <FormControlLabel
           control={
@@ -310,43 +363,76 @@ function UsersTable() {
       {loading ? (
         <Typography color="text.secondary">Loading...</Typography>
       ) : (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>ID</TableCell>
-              <TableCell>Username</TableCell>
-              <TableCell>Email</TableCell>
-              <TableCell>Alias</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {users.map(user => (
-              <TableRow key={user.id}>
-                <TableCell>{user.id}</TableCell>
-                <TableCell>{user.username}</TableCell>
-                <TableCell>{user.email}</TableCell>
-                <TableCell>{user.settings?.user_alias || '—'}</TableCell>
-                <TableCell>{user.is_active ? 'Active' : 'Inactive'}</TableCell>
-                <TableCell align="right">
-                  {user.is_active ? (
-                    <>
-                      <Button size="small" onClick={() => setEditUser(user)}>Edit</Button>
-                      <Button size="small" color="error" onClick={() => handleDeactivate(user)}>
-                        Deactivate
-                      </Button>
-                    </>
-                  ) : (
-                    <Button size="small" color="primary" onClick={() => handleRestore(user)}>
-                      Restore
-                    </Button>
-                  )}
+        <TableContainer sx={{ overflowX: 'auto' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell sx={compactCellSx}>ID</TableCell>
+                <TableCell sx={compactCellSx}>Username</TableCell>
+                {!isSmallScreen && <TableCell sx={compactCellSx}>Email</TableCell>}
+                <TableCell sx={compactCellSx}>Alias</TableCell>
+                <TableCell sx={compactCellSx} align="center">Status</TableCell>
+                <TableCell sx={compactCellSx} align="right">
+                  {!isSmallScreen && 'Actions'}
                 </TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHead>
+            <TableBody>
+              {users.map(user => (
+                <TableRow key={user.id}>
+                  <TableCell sx={compactCellSx}>{user.id}</TableCell>
+                  <TableCell sx={compactCellSx}>{user.username}</TableCell>
+                  {!isSmallScreen && <TableCell sx={compactCellSx}>{user.email}</TableCell>}
+                  <TableCell sx={compactCellSx}>{user.settings?.user_alias || '—'}</TableCell>
+                  <TableCell sx={compactCellSx} align="center">
+                    <Box
+                      component="span"
+                      role="img"
+                      aria-label={user.is_active ? 'Active' : 'Inactive'}
+                      sx={{ display: 'inline-flex', verticalAlign: 'middle' }}
+                    >
+                      {user.is_active ? (
+                        <CheckCircle color="success" fontSize="small" />
+                      ) : (
+                        <Cancel color="error" fontSize="small" />
+                      )}
+                    </Box>
+                  </TableCell>
+                  <TableCell align="right" sx={{ ...compactCellSx, whiteSpace: 'nowrap' }}>
+                    {user.is_active ? (
+                      <>
+                        <IconButton
+                          size="small"
+                          aria-label={`Edit ${user.username}`}
+                          onClick={() => setEditUser(user)}
+                        >
+                          <Edit fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          aria-label={`Deactivate ${user.username}`}
+                          onClick={() => handleDeactivate(user)}
+                        >
+                          <Delete fontSize="small" />
+                        </IconButton>
+                      </>
+                    ) : (
+                      <IconButton
+                        size="small"
+                        color="primary"
+                        aria-label={`Restore ${user.username}`}
+                        onClick={() => handleRestore(user)}
+                      >
+                        <Restore fontSize="small" />
+                      </IconButton>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
       <EditUserDialog
         user={editUser}
@@ -382,7 +468,8 @@ export default function AdminUsersPage() {
 
       <Divider sx={{ my: 3 }} />
       <Typography variant="caption" color="text.secondary">
-        Public registration can be disabled; admin create always works for allowlisted accounts.
+        Public registration can be disabled; admin create and CSV import always work for allowlisted accounts.
+        CSV import requires columns: username, email, password, password_reminder (optional: user_alias).
       </Typography>
     </>
   );

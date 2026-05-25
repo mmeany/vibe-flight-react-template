@@ -26,7 +26,7 @@ class AuthService
             exit;
         }
 
-        $errors = UserValidation::validateRegistration($username, $email, $password);
+        $errors = UserValidation::validateRegistration($username, $email, $password, $passwordReminder);
         if ($errors !== []) {
             Response::validationError(implode(' ', $errors));
             exit;
@@ -50,7 +50,13 @@ class AuthService
             'user_alias' => $username,
         ];
 
-        return $this->userRepository->create($username, $email, $passwordHash, $settings);
+        return $this->userRepository->create(
+            $username,
+            $email,
+            $passwordHash,
+            trim($passwordReminder),
+            $settings,
+        );
     }
 
     public function login(string $username, string $password): array
@@ -90,7 +96,7 @@ class AuthService
 
     public function updateSettings(int $userId, array $partial): array
     {
-        $allowed = ['theme_mode', 'date_format', 'user_alias'];
+        $allowed = ['theme_mode', 'date_format', 'user_alias', 'timezone'];
         $filtered = [];
 
         foreach ($partial as $key => $value) {
@@ -126,11 +132,58 @@ class AuthService
             exit;
         }
 
+        if (isset($filtered['timezone'])) {
+            try {
+                new \DateTimeZone($filtered['timezone']);
+            } catch (\Exception) {
+                Response::validationError('Invalid timezone');
+                exit;
+            }
+        }
+
         $settings = $this->userRepository->updateSettings($userId, $filtered);
 
         $this->logger->info('Settings updated', ['user_id' => $userId, 'changes' => $filtered]);
 
         return $settings;
+    }
+
+    public function changePassword(
+        int $userId,
+        string $currentPassword,
+        string $newPassword,
+        string $passwordReminder,
+    ): void {
+        $user = $this->userRepository->findById($userId);
+
+        if ($user === null) {
+            Response::notFound('User not found');
+            exit;
+        }
+
+        if (!password_verify($currentPassword, $user->getPasswordHash())) {
+            Response::unauthorized('Current password is incorrect');
+            exit;
+        }
+
+        $errors = array_merge(
+            UserValidation::validatePassword($newPassword),
+            UserValidation::validatePasswordReminder($passwordReminder),
+        );
+        if ($errors !== []) {
+            Response::validationError(implode(' ', $errors));
+            exit;
+        }
+
+        if (password_verify($newPassword, $user->getPasswordHash())) {
+            Response::validationError('New password must be different from current password');
+            exit;
+        }
+
+        $passwordHash = UserValidation::hashPassword($newPassword);
+        $this->userRepository->updatePassword($userId, $passwordHash, trim($passwordReminder));
+
+        $this->logger->info('Password changed', ['user_id' => $userId]);
     }
 
 }

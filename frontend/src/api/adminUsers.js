@@ -8,20 +8,24 @@ export async function listUsers(includeInactive = false) {
   return response.data.data;
 }
 
-export async function createUser({ username, email, password, user_alias }) {
+export async function createUser({ username, email, password, password_reminder, user_alias }) {
   const response = await apiClient.post('/admin/users', {
     username,
     email,
     password,
+    password_reminder,
     user_alias,
   });
   return response.data.data;
 }
 
-export async function updateUser(id, { username, email, password, user_alias }) {
+export async function updateUser(id, { username, email, password, password_reminder, user_alias }) {
   const body = { username, email, user_alias };
   if (password) {
     body.password = password;
+  }
+  if (password_reminder !== undefined) {
+    body.password_reminder = password_reminder;
   }
   const response = await apiClient.patch(`/admin/users/${id}`, body);
   return response.data.data;

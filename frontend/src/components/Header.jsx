@@ -1,5 +1,7 @@
 import {
   Dashboard as DashboardIcon,
+  Help as HelpIcon,
+  Info as InfoIcon,
   Logout as LogoutIcon,
   Menu as MenuIcon,
   People as PeopleIcon,
@@ -90,6 +92,14 @@ export default function Header() {
           <ListItemIcon><SettingsIcon /></ListItemIcon>
           <ListItemText primary="Settings" />
         </ListItemButton>
+        <ListItemButton onClick={() => navigateTo('/help')}>
+          <ListItemIcon><HelpIcon /></ListItemIcon>
+          <ListItemText primary="Help" />
+        </ListItemButton>
+        <ListItemButton onClick={() => navigateTo('/about')}>
+          <ListItemIcon><InfoIcon /></ListItemIcon>
+          <ListItemText primary="About" />
+        </ListItemButton>
         {isAdmin && (
           <ListItemButton onClick={() => navigateTo('/admin/users')}>
             <ListItemIcon><PeopleIcon /></ListItemIcon>
@@ -151,6 +161,14 @@ export default function Header() {
         <MenuItem onClick={() => navigateTo('/settings')}>
           <ListItemIcon><SettingsIcon fontSize="small" /></ListItemIcon>
           Settings
+        </MenuItem>
+        <MenuItem onClick={() => navigateTo('/help')}>
+          <ListItemIcon><HelpIcon fontSize="small" /></ListItemIcon>
+          Help
+        </MenuItem>
+        <MenuItem onClick={() => navigateTo('/about')}>
+          <ListItemIcon><InfoIcon fontSize="small" /></ListItemIcon>
+          About
         </MenuItem>
         {isAdmin && (
           <MenuItem onClick={() => navigateTo('/admin/users')}>

@@ -34,6 +34,10 @@ $router->group('/api/v1', function (\flight\net\Router $router) use ($container)
     $router->patch('/settings', function () use ($container) {
         $container->get(AuthController::class)->updateSettings();
     });
+
+    $router->post('/password', function () use ($container) {
+        $container->get(AuthController::class)->changePassword();
+    });
 }, [JwtMiddleware::class]);
 
 $router->group('/api/v1', function (\flight\net\Router $router) use ($container) {

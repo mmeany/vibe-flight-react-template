@@ -9,3 +9,12 @@ export async function updateSettings(key, value) {
   const response = await apiClient.patch('/settings', { [key]: value });
   return response.data.data;
 }
+
+export async function changePassword({ current_password, new_password, password_reminder }) {
+  const response = await apiClient.post('/password', {
+    current_password,
+    new_password,
+    password_reminder,
+  });
+  return response.data.data;
+}

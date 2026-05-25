@@ -40,6 +40,7 @@ class Database
                 username VARCHAR(255) NOT NULL UNIQUE,
                 email VARCHAR(255) NOT NULL UNIQUE,
                 password_hash VARCHAR(255) NOT NULL,
+                password_reminder VARCHAR(255) NOT NULL DEFAULT \'No hint\',
                 settings JSON NOT NULL DEFAULT (\'{}\'),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -55,6 +56,16 @@ class Database
 
         try {
             $this->pdo->exec('ALTER TABLE users ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL');
+        } catch (\PDOException $e) {
+            if ($e->getCode() !== '42S21') {
+                throw $e;
+            }
+        }
+
+        try {
+            $this->pdo->exec(
+                "ALTER TABLE users ADD COLUMN password_reminder VARCHAR(255) NOT NULL DEFAULT 'No hint'"
+            );
         } catch (\PDOException $e) {
             if ($e->getCode() !== '42S21') {
                 throw $e;

@@ -20,9 +20,10 @@ class AdminUserController
         $username = trim($body['username'] ?? '');
         $email = trim($body['email'] ?? '');
         $password = $body['password'] ?? '';
+        $passwordReminder = $body['password_reminder'] ?? '';
         $userAlias = isset($body['user_alias']) ? trim((string) $body['user_alias']) : null;
 
-        $user = $this->userAdminService->createUser($username, $email, $password, $userAlias);
+        $user = $this->userAdminService->createUser($username, $email, $password, $passwordReminder, $userAlias);
         Response::created($user->toArray());
     }
 
@@ -65,6 +66,9 @@ class AdminUserController
         $email = trim($body['email'] ?? '');
         $password = isset($body['password']) ? (string) $body['password'] : null;
         $userAlias = isset($body['user_alias']) ? trim((string) $body['user_alias']) : null;
+        $passwordReminder = array_key_exists('password_reminder', $body)
+            ? (string) $body['password_reminder']
+            : null;
 
         $user = $this->userAdminService->updateUser(
             (int) $id,
@@ -72,6 +76,7 @@ class AdminUserController
             $email,
             $password,
             $userAlias,
+            $passwordReminder,
             $actingUserId,
         );
         Response::success($user->toArray());
