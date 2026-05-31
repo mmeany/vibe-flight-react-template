@@ -1,0 +1,4 @@
+/* Reserve scrollbar width so layout does not shift between short and long pages */
+html {
+  scrollbar-gutter: stable;
+}

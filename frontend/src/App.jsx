@@ -1,4 +1,3 @@
-import { Box } from '@mui/material';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -11,31 +10,22 @@ import { DEFAULT_HELP_TOPIC_ID } from './help/helpTopics';
 import AdminUsersPage from './pages/AdminUsersPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
-import GuestRoute from './components/GuestRoute';
-import PublicHeader from './components/PublicHeader';
+import PublicLayout from './components/PublicLayout';
 import Layout from './components/Layout';
 import PageContainer from './components/PageContainer';
 
 export default function App() {
   return (
     <Routes>
-      <Route
-        path="/"
-        element={
-          <GuestRoute>
-            <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-              <PublicHeader />
-              <LandingPage />
-            </Box>
-          </GuestRoute>
-        }
-      />
-      <Route path="/login" element={
-        <PageContainer fullPage><LoginPage /></PageContainer>
-      } />
-      <Route path="/register" element={
-        <PageContainer fullPage><RegisterPage /></PageContainer>
-      } />
+      <Route element={<PublicLayout />}>
+        <Route index element={<LandingPage />} />
+        <Route path="login" element={
+          <PageContainer fullPage><LoginPage /></PageContainer>
+        } />
+        <Route path="register" element={
+          <PageContainer fullPage><RegisterPage /></PageContainer>
+        } />
+      </Route>
       <Route element={<Layout />}>
         <Route path="/dashboard" element={
           <ProtectedRoute><DashboardPage /></ProtectedRoute>

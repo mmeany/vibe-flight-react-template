@@ -32,16 +32,17 @@ flowchart LR
 
 ## Step 1 — Add new files
 
-Copy these four files from the latest template (or create them from the snippets below):
+Copy these files from the latest template (or create them from the snippets below):
 
 | File | Purpose |
 |------|---------|
 | `frontend/src/landing/landingContent.js` | Editable marketing copy |
-| `frontend/src/components/GuestRoute.jsx` | Redirect signed-in users away from `/` |
-| `frontend/src/components/PublicHeader.jsx` | Guest top bar (Sign in / Sign up) |
+| `frontend/src/components/GuestRoute.jsx` | Redirect signed-in users away from public routes |
+| `frontend/src/components/PublicHeader.jsx` | Guest top bar (app name → `/`, Sign in / Sign up) |
+| `frontend/src/components/PublicLayout.jsx` | Shell: `GuestRoute` + `PublicHeader` + `<Outlet />` for `/`, `/login`, `/register` |
 | `frontend/src/pages/LandingPage.jsx` | Landing sections UI |
 
-**Fastest path:** copy the four files verbatim from upstream `frontend/src/...` in [vibe-flight-react-template](https://github.com/mmeany/vibe-flight-react-template) at the commit that introduced this update.
+**Fastest path:** copy the files verbatim from upstream `frontend/src/...` in [vibe-flight-react-template](https://github.com/mmeany/vibe-flight-react-template) at the commit that introduced this update.
 
 ### `frontend/src/landing/landingContent.js`
 
@@ -184,32 +185,56 @@ Copy the full file from the template repo (`frontend/src/pages/LandingPage.jsx`)
 
 ---
 
+### `frontend/src/components/PublicLayout.jsx`
+
+```jsx
+import { Box } from '@mui/material';
+import { Outlet } from 'react-router-dom';
+import GuestRoute from './GuestRoute';
+import PublicHeader from './PublicHeader';
+
+export default function PublicLayout() {
+  return (
+    <GuestRoute>
+      <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <PublicHeader />
+        <Box component="main" sx={{ flexGrow: 1 }}>
+          <Outlet />
+        </Box>
+      </Box>
+    </GuestRoute>
+  );
+}
+```
+
+---
+
 ## Step 2 — Update `frontend/src/App.jsx`
 
 **Add imports:**
 
 ```jsx
-import { Box } from '@mui/material';
 import LandingPage from './pages/LandingPage';
-import GuestRoute from './components/GuestRoute';
-import PublicHeader from './components/PublicHeader';
+import PublicLayout from './components/PublicLayout';
 ```
 
-**Add a public route for `/` before `/login`:**
+**Replace the public `/`, `/login`, and `/register` routes** with a nested group (login and register get the same header as the landing page; app title links home):
 
 ```jsx
-<Route
-  path="/"
-  element={
-    <GuestRoute>
-      <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-        <PublicHeader />
-        <LandingPage />
-      </Box>
-    </GuestRoute>
-  }
-/>
+<Route element={<PublicLayout />}>
+  <Route index element={<LandingPage />} />
+  <Route path="login" element={
+    <PageContainer fullPage><LoginPage /></PageContainer>
+  } />
+  <Route path="register" element={
+    <PageContainer fullPage><RegisterPage /></PageContainer>
+  } />
+</Route>
 ```
+
+Do not mount `/login` or `/register` outside `PublicLayout` — guests would have no way back to `/`.
+
+**If you already applied an older version of this guide** that only wrapped `/` in `GuestRoute` + `PublicHeader`, add `PublicLayout.jsx` and switch to the nested routes above; remove standalone `/login` and `/register` routes.
 
 **Inside the `<Route element={<Layout />}>` block**, change the dashboard path from `/` to `/dashboard`:
 
@@ -310,11 +335,12 @@ Feature `icon` keys: `speed`, `security`, `extension` (mapped in `LandingPage.js
 ## Verify
 
 1. Signed out: `/` shows landing + public header (not the authenticated header).
-2. Signed out: `/settings` redirects to `/` (not `/login`).
-3. Landing **Sign in** → `/login`; login → `/dashboard` with full header.
-4. Signed in: `/` redirects to `/dashboard`.
-5. Logout → `/` landing.
-6. With registration disabled in API config: Sign up hidden on landing and public header; `/register` still works if opened directly.
+2. Signed out: `/login` and `/register` show the same public header; app title returns to `/`.
+3. Signed out: `/settings` redirects to `/` (not `/login`).
+4. Landing **Sign in** → `/login`; login → `/dashboard` with full header.
+5. Signed in: `/`, `/login`, and `/register` redirect to `/dashboard`.
+6. Logout → `/` landing.
+7. With registration disabled in API config: Sign up hidden on landing and public header; `/register` still works if opened directly.
 
 ```bash
 cd frontend && npm run build && npm test
