@@ -53,7 +53,7 @@ export default function Header() {
     handleMenuClose();
     setDrawerOpen(false);
     logout();
-    navigate('/login');
+    navigate('/');
   };
 
   const navigateTo = (path) => {
@@ -84,7 +84,7 @@ export default function Header() {
         <Typography variant="subtitle1">{displayName}</Typography>
       </Box>
       <List>
-        <ListItemButton onClick={() => navigateTo('/')}>
+        <ListItemButton onClick={() => navigateTo('/dashboard')}>
           <ListItemIcon><DashboardIcon /></ListItemIcon>
           <ListItemText primary="Dashboard" />
         </ListItemButton>
@@ -133,7 +133,7 @@ export default function Header() {
             <Typography
               variant="h6"
               component={RouterLink}
-              to="/"
+              to="/dashboard"
               sx={{ flexGrow: 1, textDecoration: 'none', color: 'inherit' }}
             >
               {appName}
@@ -154,7 +154,7 @@ export default function Header() {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
-        <MenuItem onClick={() => navigateTo('/')}>
+        <MenuItem onClick={() => navigateTo('/dashboard')}>
           <ListItemIcon><DashboardIcon fontSize="small" /></ListItemIcon>
           Dashboard
         </MenuItem>

@@ -7,7 +7,7 @@ const RAW_TOPICS = [
     sections: [
       {
         type: 'paragraph',
-        text: 'Flight React App is a template for authenticated web applications. After login, the Dashboard is your home screen. Use Settings to personalize appearance, dates, timezone, and account security.',
+        text: 'Flight React App is a template for authenticated web applications. The public home page is at / (marketing landing when signed out). After login, the Dashboard at /dashboard is your home screen. Use Settings to personalize appearance, dates, timezone, and account security.',
       },
       {
         type: 'heading',
@@ -27,7 +27,7 @@ const RAW_TOPICS = [
       {
         type: 'list',
         items: [
-          'Dashboard — landing page after sign-in.',
+          'Dashboard — app home after sign-in (/dashboard).',
           'Settings — theme, date format, display alias, timezone, and password change.',
           'Help — these instructions.',
           'About — app description and version.',

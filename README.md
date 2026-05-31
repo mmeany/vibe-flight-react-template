@@ -80,6 +80,57 @@ CSV template: [docs/admin-users.csv.example](docs/admin-users.csv.example). Requ
 
 Upload the **contents** of `dist/` to your host. See [DEPLOY.md](DEPLOY.md).
 
+## Template maintenance
+
+This repo is a **starting point**, not a dependency. Apps you build from it are independent products; template changes do not flow in automatically.
+
+### Starting a new app
+
+Prefer one of these over `git clone` + deleting `.git` (same outcome, less cleanup):
+
+| Method | Notes |
+|--------|--------|
+| [`new-vibe`](https://github.com/mmeany/vibe-new-vibe) | Recommended scaffold (see its README). |
+| GitHub **Use this template** | Creates a new repo with no fork link to this template. |
+| `gh repo create my-app --template <owner>/vibe-flight-react-template` | CLI equivalent of **Use this template**. |
+
+Then complete [Starting a new project](#starting-a-new-project) (branding, `.env`, `build.sh` base path).
+
+A GitHub **fork** is optional. It helps if you contribute fixes back here via pull request; it does **not** auto-update your app when this template changes.
+
+### Linking an existing app to the template
+
+In your app repo, add a read-only remote (name it `template` or `upstream`):
+
+```shell
+git remote add template https://github.com/<owner>/vibe-flight-react-template.git
+git fetch template
+```
+
+Use this to inspect diffs or cherry-pick commits. Your deploy remote stays `origin` on **your** app repository.
+
+### Pulling changes into an existing app
+
+Choose based on how much the app has diverged:
+
+| Situation | Approach |
+|-----------|----------|
+| Documented feature (routes, new files, small edits) | Follow a guide in [update.md](update.md) (copy files + apply diffs). Best when you customized the same areas. |
+| One clean upstream commit you want as-is | `git fetch template && git cherry-pick <sha>` on a branch, resolve conflicts, run tests. |
+| Staying close to the template | `git merge template/main` — expect conflicts once the app has its own features. |
+
+There is no safe “always `git pull` from template” workflow for mature apps. Tag releases on this template (e.g. `v1.1.0`) and note the tag in each `update.md` guide when you add one.
+
+**Example:** public guest landing + `/dashboard` home — [update.md](update.md).
+
+### Maintaining this template repo
+
+When you ship a change that existing apps should adopt:
+
+1. Merge to the default branch here.
+2. Tag a release if the change is worth tracking (`git tag v1.x.x && git push --tags`).
+3. Add or extend [update.md](update.md) with before/after routes, new files, and grep hints for forks.
+
 ## Architecture notes
 
 ### User settings bundled in login response
