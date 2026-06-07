@@ -16,7 +16,11 @@ import {
   useTheme,
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
+import ContactForm from '../components/ContactForm';
+import LegalFooter from '../components/LegalFooter';
+import { trackEvent } from '../cookieConsent/analytics';
 import { useAppConfig } from '../contexts/AppConfigContext';
+import { CONTACT_FORM } from '../content/siteContent';
 import {
   LANDING_CTA,
   LANDING_FEATURES,
@@ -155,6 +159,14 @@ export default function LandingPage() {
         </Container>
       </Box>
 
+      <Container
+        id={CONTACT_FORM.sectionId}
+        maxWidth="md"
+        sx={{ py: { xs: 6, md: 8 }, px: { xs: 2, sm: 3 } }}
+      >
+        <ContactForm onSuccess={category => trackEvent('contact_form_submit', { category })} />
+      </Container>
+
       <Container maxWidth="md" sx={{ py: { xs: 6, md: 8 }, px: { xs: 2, sm: 3 } }}>
         <Paper
           elevation={0}
@@ -213,9 +225,10 @@ export default function LandingPage() {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
           {LANDING_FOOTER}
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
           Version {APP_VERSION}
         </Typography>
+        <LegalFooter />
       </Box>
     </Box>
   );

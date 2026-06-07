@@ -1,8 +1,11 @@
 <?php
 
+use App\Controllers\AdminSubmissionController;
 use App\Controllers\AdminUserController;
 use App\Controllers\AuthController;
+use App\Controllers\ChallengeController;
 use App\Controllers\ConfigController;
+use App\Controllers\ContactController;
 use App\Http\Response;
 use App\Middleware\AdminMiddleware;
 use App\Middleware\JwtMiddleware;
@@ -23,6 +26,14 @@ $router->group('/api/v1', function (\flight\net\Router $router) use ($container)
     $router->get('/config', function () {
         $controller = new ConfigController();
         $controller->publicConfig();
+    });
+
+    $router->get('/challenge', function () use ($container) {
+        $container->get(ChallengeController::class)->show();
+    });
+
+    $router->post('/contact', function () use ($container) {
+        $container->get(ContactController::class)->submit();
     });
 }, []);
 
@@ -67,5 +78,17 @@ $router->group('/api/v1', function (\flight\net\Router $router) use ($container)
 
     $router->post('/admin/users/@id:\d+/restore', function (string $id) use ($container) {
         $container->get(AdminUserController::class)->restore($id);
+    });
+
+    $router->get('/admin/submissions', function () use ($container) {
+        $container->get(AdminSubmissionController::class)->index();
+    });
+
+    $router->patch('/admin/submissions/@id:\d+/ignore', function (string $id) use ($container) {
+        $container->get(AdminSubmissionController::class)->ignore($id);
+    });
+
+    $router->post('/admin/submissions/@id:\d+/reply', function (string $id) use ($container) {
+        $container->get(AdminSubmissionController::class)->reply($id);
     });
 }, [JwtMiddleware::class, AdminMiddleware::class]);

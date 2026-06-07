@@ -56,6 +56,16 @@ class Response
         self::error($message, 'VALIDATION_ERROR', 400);
     }
 
+    public static function unprocessableEntity(string $message): void
+    {
+        self::error($message, 'VALIDATION_ERROR', 422);
+    }
+
+    public static function tooManyRequests(string $message): void
+    {
+        self::error($message, 'RATE_LIMIT', 429);
+    }
+
     public static function serverError(string $message = 'Internal server error'): void
     {
         self::error($message, 'SERVER_ERROR', 500);

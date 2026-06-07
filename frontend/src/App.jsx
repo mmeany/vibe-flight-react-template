@@ -8,6 +8,11 @@ import HelpPage from './pages/HelpPage';
 import AboutPage from './pages/AboutPage';
 import { DEFAULT_HELP_TOPIC_ID } from './help/helpTopics';
 import AdminUsersPage from './pages/AdminUsersPage';
+import AdminSubmissionsPage from './pages/AdminSubmissionsPage';
+import TermsPage from './pages/TermsPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import AnalyticsRouteTracker from './components/AnalyticsRouteTracker';
+import CookieConsentManager from './components/CookieConsentManager';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import PublicLayout from './components/PublicLayout';
@@ -16,9 +21,14 @@ import PageContainer from './components/PageContainer';
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <CookieConsentManager />
+      <AnalyticsRouteTracker />
+      <Routes>
       <Route element={<PublicLayout />}>
         <Route index element={<LandingPage />} />
+        <Route path="terms" element={<TermsPage />} />
+        <Route path="privacy" element={<PrivacyPolicyPage />} />
         <Route path="login" element={
           <PageContainer fullPage><LoginPage /></PageContainer>
         } />
@@ -43,7 +53,13 @@ export default function App() {
             <AdminRoute><AdminUsersPage /></AdminRoute>
           </ProtectedRoute>
         } />
+        <Route path="/admin/submissions" element={
+          <ProtectedRoute>
+            <AdminRoute><AdminSubmissionsPage /></AdminRoute>
+          </ProtectedRoute>
+        } />
       </Route>
     </Routes>
+    </>
   );
 }

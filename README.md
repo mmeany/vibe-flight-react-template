@@ -7,6 +7,10 @@ Monorepo template: **PHP Flight** API (`/backend`) + **React** SPA (`/frontend`)
 - JWT auth (login, logout, optional public registration)
 - User settings (theme, date format, display alias) stored server-side
 - Admin user management and CSV import
+- **Contact Us** form on the landing page (math challenge, rate limits, SMTP auto-ack)
+- Admin **Submissions** UI (view, ignore, follow-up reply)
+- Terms & Conditions and Privacy Policy (`/terms`, `/privacy`)
+- Cookie consent (opt-in) and consent-gated Google Analytics 4
 - Empty dashboard shell with version footer
 - `build.sh` — production bundle (default base path `/app/`)
 
@@ -23,7 +27,7 @@ Or clone this template manually, then:
 1. Set branding in `frontend/public/project.json` and `frontend/index.html`.
 2. Set default deploy base in `build.sh` (`BASE=`) and match `project.json` → `link`.
 3. Update favicons under `frontend/public/` and add the image path from `project.json` → `img`.
-4. Copy `backend/.env.example` to `backend/.env` and configure MySQL + `JWT_SECRET`.
+4. Copy `.env.example` to `.env` at the **repo root** and configure MySQL, `JWT_SECRET`, `CHALLENGE_SECRET`, and SMTP.
 5. Build: `./build.sh --base /your-path/` (see [DEPLOY.md](DEPLOY.md)).
 
 Cursor project skill: `.cursor/skills/mvm-flight-react/`.
@@ -35,10 +39,12 @@ Cursor project skill: `.cursor/skills/mvm-flight-react/`.
 ```shell
 cd backend
 composer install
-cp .env.example .env   # edit DB_* and JWT_SECRET
+cp ../.env.example ../.env   # edit DB_*, JWT_SECRET, CHALLENGE_SECRET, SMTP_*
 composer start
 # http://localhost:8080
 ```
+
+Use `DB_HOST=127.0.0.1` on WSL/Linux (not `localhost`). For local email testing, run [Mailpit](https://github.com/axllent/mailpit) and set `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1025`, `SMTP_SECURE=none`.
 
 **Terminal 2 — frontend:**
 
@@ -51,7 +57,7 @@ npm run dev
 
 ## First admin user
 
-`ADMIN_USERNAMES` in `.env` grants access to the **Users** admin UI; it does not create accounts.
+`ADMIN_USERNAMES` in `.env` grants access to the **Users** and **Submissions** admin UIs; it does not create accounts.
 
 1. Set `REGISTRATION_ENABLED=true` in `.env`.
 2. Register via the app (or use **Users** → Create after step 4).
@@ -115,13 +121,13 @@ Choose based on how much the app has diverged:
 
 | Situation | Approach |
 |-----------|----------|
-| Documented feature (routes, new files, small edits) | Follow a guide in [update.md](update.md) (copy files + apply diffs). Best when you customized the same areas. |
+| Documented feature (routes, new files, small edits) | Follow [update.md](update.md) or [guidelines_update.md](guidelines_update.md) (copy files + apply diffs). Best when you customized the same areas. |
 | One clean upstream commit you want as-is | `git fetch template && git cherry-pick <sha>` on a branch, resolve conflicts, run tests. |
 | Staying close to the template | `git merge template/main` — expect conflicts once the app has its own features. |
 
 There is no safe “always `git pull` from template” workflow for mature apps. Tag releases on this template (e.g. `v1.1.0`) and note the tag in each `update.md` guide when you add one.
 
-**Example:** public guest landing + `/dashboard` home — [update.md](update.md).
+**Examples:** public guest landing — [update.md](update.md); Contact Us, legal pages, cookie consent, GA4 — [guidelines_update.md](guidelines_update.md).
 
 ### Maintaining this template repo
 
@@ -129,7 +135,7 @@ When you ship a change that existing apps should adopt:
 
 1. Merge to the default branch here.
 2. Tag a release if the change is worth tracking (`git tag v1.x.x && git push --tags`).
-3. Add or extend [update.md](update.md) with before/after routes, new files, and grep hints for forks.
+3. Add or extend [update.md](update.md) or [guidelines_update.md](guidelines_update.md) with before/after routes, new files, and grep hints for forks.
 
 ## Architecture notes
 

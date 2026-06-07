@@ -2,7 +2,24 @@
 
 declare(strict_types=1);
 
-header('Access-Control-Allow-Origin: *');
+$ds = DIRECTORY_SEPARATOR;
+$autoload = __DIR__ . $ds . 'vendor' . $ds . 'autoload.php';
+if (!is_file($autoload)) {
+    $autoload = __DIR__ . $ds . '..' . $ds . 'vendor' . $ds . 'autoload.php';
+}
+require $autoload;
+
+use App\Config\AppConfig;
+
+AppConfig::load();
+
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$allowedOrigins = AppConfig::getCorsOrigins();
+if ($origin !== '' && in_array($origin, $allowedOrigins, true)) {
+    header('Access-Control-Allow-Origin: ' . $origin);
+    header('Vary: Origin');
+}
+
 header('Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
@@ -11,7 +28,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-$ds = DIRECTORY_SEPARATOR;
 // Deployed bundle: index.php and app/ share the same directory (see build.sh).
 // Local dev: index.php lives in public/ with app/ one level up.
 $bootstrap = __DIR__ . $ds . 'app' . $ds . 'Config' . $ds . 'bootstrap.php';

@@ -72,4 +72,11 @@ class Database
             }
         }
     }
+
+    public function runFileMigrations(\Psr\Log\LoggerInterface $logger): void
+    {
+        $migrationsPath = dirname(__DIR__, 2) . '/migrations';
+        $runner = new MigrationRunner($this->pdo, $logger, $migrationsPath);
+        $runner->run();
+    }
 }

@@ -58,8 +58,18 @@ chmod 600 .env
 | `JWT_EXPIRATION_DAYS` | e.g. `30` |
 | `REGISTRATION_ENABLED` | `false` (recommended) — disables public sign-up; admins can still create users (see below) |
 | `ADMIN_USERNAMES` | Comma-separated login usernames allowed to use **Users** admin UI, e.g. `mark` or `mark,jane` (exact match, case-sensitive) |
-| `LOG_DIR` | `../../logs` (writes to `logs/app.log` under deploy root) |
+| `LOG_DIR` | `logs` (writes to `logs/app.log` under deploy root) |
 | `LOG_LEVEL` | `ERROR` or `WARNING` |
+| `CHALLENGE_SECRET` | Long random string for contact-form security tokens, e.g. `openssl rand -hex 32` |
+| `SMTP_HOST` | SMTP server hostname |
+| `SMTP_PORT` | SMTP port (e.g. `587` for TLS, `1025` for Mailpit locally) |
+| `SMTP_SECURE` | `tls`, `ssl`, or `none` |
+| `SMTP_USER` / `SMTP_PASS` | SMTP credentials (leave empty if not required) |
+| `SMTP_FROM_EMAIL` / `SMTP_FROM_NAME` | Outbound mail From header |
+| `SMTP_AUTH` | Optional `true`/`false`; defaults to true when `SMTP_USER` is set |
+| `CORS_ORIGINS` | Comma-separated allowed origins for API CORS |
+| `VITE_GA_MEASUREMENT_ID` | GA4 Measurement ID — set at **build** time via root `.env` (production only) |
+| `VITE_SITE_URL` | Canonical site URL for SEO/legal pages — set at **build** time |
 
 Never commit `.env` to git.
 
@@ -79,7 +89,7 @@ chmod 775 logs
 |--------------------------|---------|
 | `index.html`, `assets/` | React SPA (built with Vite `base` matching `--base`) |
 | `index.php` | PHP API entry |
-| `app/`, `vendor/` | Backend code (blocked from direct web access) |
+| `app/`, `vendor/`, `migrations/` | Backend code and SQL migrations (blocked from direct web access except via boot) |
 | `.htaccess` | Rewrites, SPA fallback, security denies |
 | `.env.example` | Template for operators |
 | `logs/` | Application logs |
@@ -101,7 +111,10 @@ Replace `<domain>` with your host.
 4. **Security** — `https://<domain>/app/app/` returns 403 Forbidden.
 5. **Logs** — after a request, `logs/app.log` exists and is writable.
 6. **Auth** — login works with a user in the database.
-7. **Admin** — with `ADMIN_USERNAMES` set, admin login shows **Users**; creating a user via that page succeeds while public registration is disabled.
+7. **Admin** — with `ADMIN_USERNAMES` set, admin login shows **Users** and **Submissions**; creating a user via that page succeeds while public registration is disabled.
+8. **Contact** — landing page Contact Us form submits successfully; acknowledgement email arrives (check SMTP).
+9. **Legal** — `/terms` and `/privacy` load without login; cookie banner appears on public routes.
+10. **Analytics** — GA4 script loads only after accepting analytics cookies (check Network tab in production build).
 
 ## Troubleshooting
 

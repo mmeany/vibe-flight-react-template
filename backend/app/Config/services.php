@@ -1,11 +1,20 @@
 <?php
 
 use App\Config\AppConfig;
+use App\Controllers\AdminSubmissionController;
 use App\Controllers\AdminUserController;
 use App\Controllers\AuthController;
+use App\Controllers\ChallengeController;
+use App\Controllers\ContactController;
 use App\Database\Database;
+use App\Repositories\RateLimitRepository;
+use App\Repositories\SubmissionRepository;
 use App\Repositories\UserRepository;
 use App\Services\AuthService;
+use App\Services\ChallengeService;
+use App\Services\ContactService;
+use App\Services\MailService;
+use App\Services\RateLimitService;
 use App\Services\UserAdminService;
 use DI\ContainerBuilder;
 use Monolog\Handler\StreamHandler;
@@ -40,6 +49,7 @@ $logger->pushHandler(new StreamHandler("$logDir/app.log", AppConfig::resolveLogL
 try {
     $db = new Database();
     $db->migrate();
+    $db->runFileMigrations($logger);
     $logger->info('Database migration completed successfully');
 } catch (\Throwable $e) {
     $logger->error('Database migration failed: ' . $e->getMessage());
@@ -57,6 +67,25 @@ $containerBuilder->addDefinitions([
     AuthController::class => \DI\autowire()->constructor(\DI\get(AuthService::class)),
     UserAdminService::class => \DI\autowire()->constructor(\DI\get(UserRepository::class), \DI\get(LoggerInterface::class)),
     AdminUserController::class => \DI\autowire()->constructor(\DI\get(UserAdminService::class)),
+    SubmissionRepository::class => \DI\autowire()->constructor(\DI\get(Database::class)),
+    RateLimitRepository::class => \DI\autowire()->constructor(\DI\get(Database::class)),
+    MailService::class => \DI\autowire()->constructor(\DI\get(LoggerInterface::class)),
+    ChallengeService::class => \DI\autowire()->constructor(\DI\get(LoggerInterface::class)),
+    RateLimitService::class => \DI\autowire()->constructor(
+        \DI\get(Database::class),
+        \DI\get(RateLimitRepository::class),
+        \DI\get(LoggerInterface::class),
+    ),
+    ContactService::class => \DI\autowire()->constructor(
+        \DI\get(SubmissionRepository::class),
+        \DI\get(ChallengeService::class),
+        \DI\get(RateLimitService::class),
+        \DI\get(MailService::class),
+        \DI\get(LoggerInterface::class),
+    ),
+    ChallengeController::class => \DI\autowire()->constructor(\DI\get(ChallengeService::class)),
+    ContactController::class => \DI\autowire()->constructor(\DI\get(ContactService::class)),
+    AdminSubmissionController::class => \DI\autowire()->constructor(\DI\get(ContactService::class)),
 ]);
 
 $container = $containerBuilder->build();

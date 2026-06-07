@@ -62,7 +62,7 @@ Custom CLI commands use [flightphp/runway](https://github.com/flightphp/runway) 
 
 ## 2. Frontend Module (`/frontend`)
 
-*   **Tech stack:** React JS (no TypeScript), Vite, MUI v6+.
+*   **Tech stack:** React JS (no TypeScript), Vite, MUI v9+.
 *   **Style:** Functional components only; hooks for state and effects.
 *   **MUI:** Prefer `sx` and `createTheme`; avoid raw CSS where MUI covers the need.
 *   **API:** Centralize calls in `src/api/`. Use `import.meta.env.BASE_URL` for paths (see `storage.js`, `client.js`).

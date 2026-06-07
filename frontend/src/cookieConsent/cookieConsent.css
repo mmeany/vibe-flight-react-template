@@ -1,0 +1,11 @@
+#cc-main {
+  --cc-font-family: inherit;
+  --cc-bg: #fff;
+  --cc-text: #1a1a1a;
+  --cc-btn-primary-bg: #1976d2;
+  --cc-btn-primary-text: #fff;
+  --cc-btn-secondary-bg: #f5f5f5;
+  --cc-btn-secondary-text: #1a1a1a;
+  --cc-separator-border-color: rgba(0, 0, 0, 0.12);
+  z-index: 1400;
+}

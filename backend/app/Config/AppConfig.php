@@ -22,6 +22,17 @@ class AppConfig
     private static string $logDir;
     private static string $logLevel;
     private static string $appEnv;
+    private static string $challengeSecret;
+    private static string $smtpHost;
+    private static int $smtpPort;
+    private static string $smtpSecure;
+    private static string $smtpUser;
+    private static string $smtpPass;
+    private static string $smtpFromEmail;
+    private static string $smtpFromName;
+    private static ?bool $smtpAuth;
+    /** @var string[] */
+    private static array $corsOrigins;
 
     public static function load(): void
     {
@@ -29,8 +40,16 @@ class AppConfig
             return;
         }
 
-        $dotenv = Dotenv::createImmutable(__DIR__ . '/../..');
-        $dotenv->load();
+        $repoRoot = realpath(__DIR__ . '/../../..') ?: (__DIR__ . '/../../..');
+        $backendRoot = realpath(__DIR__ . '/../..') ?: (__DIR__ . '/../..');
+
+        if (is_file($repoRoot . '/.env')) {
+            $dotenv = Dotenv::createImmutable($repoRoot);
+            $dotenv->load();
+        } elseif (is_file($backendRoot . '/.env')) {
+            $dotenv = Dotenv::createImmutable($backendRoot);
+            $dotenv->load();
+        }
 
         self::$dbHost = $_ENV['DB_HOST'] ?? '127.0.0.1';
         self::$dbPort = $_ENV['DB_PORT'] ?? '3306';
@@ -45,9 +64,26 @@ class AppConfig
             static fn (string $name): string => trim($name),
             explode(',', $adminRaw)
         ), static fn (string $name): bool => $name !== ''));
-        self::$logDir = $_ENV['LOG_DIR'] ?? '../../logs';
+        self::$logDir = $_ENV['LOG_DIR'] ?? 'logs';
         self::$logLevel = strtoupper($_ENV['LOG_LEVEL'] ?? 'DEBUG');
         self::$appEnv = strtolower($_ENV['APP_ENV'] ?? 'development');
+        self::$challengeSecret = $_ENV['CHALLENGE_SECRET'] ?? '';
+        self::$smtpHost = $_ENV['SMTP_HOST'] ?? '127.0.0.1';
+        self::$smtpPort = (int) ($_ENV['SMTP_PORT'] ?? 1025);
+        self::$smtpSecure = strtolower($_ENV['SMTP_SECURE'] ?? 'none');
+        self::$smtpUser = $_ENV['SMTP_USER'] ?? '';
+        self::$smtpPass = $_ENV['SMTP_PASS'] ?? '';
+        self::$smtpFromEmail = $_ENV['SMTP_FROM_EMAIL'] ?? 'noreply@example.com';
+        self::$smtpFromName = $_ENV['SMTP_FROM_NAME'] ?? 'Flight React App';
+        $smtpAuthRaw = $_ENV['SMTP_AUTH'] ?? null;
+        self::$smtpAuth = $smtpAuthRaw === null || $smtpAuthRaw === ''
+            ? null
+            : filter_var($smtpAuthRaw, FILTER_VALIDATE_BOOLEAN);
+        $corsRaw = $_ENV['CORS_ORIGINS'] ?? 'http://localhost:5173';
+        self::$corsOrigins = array_values(array_filter(array_map(
+            static fn (string $origin): string => trim($origin),
+            explode(',', $corsRaw)
+        ), static fn (string $origin): bool => $origin !== ''));
 
         self::$loaded = true;
     }
@@ -123,6 +159,63 @@ class AppConfig
     public static function isProduction(): bool
     {
         return self::$appEnv === 'production';
+    }
+
+    public static function getChallengeSecret(): string
+    {
+        return self::$challengeSecret;
+    }
+
+    public static function getSmtpHost(): string
+    {
+        return self::$smtpHost;
+    }
+
+    public static function getSmtpPort(): int
+    {
+        return self::$smtpPort;
+    }
+
+    public static function getSmtpSecure(): string
+    {
+        return self::$smtpSecure;
+    }
+
+    public static function getSmtpUser(): string
+    {
+        return self::$smtpUser;
+    }
+
+    public static function getSmtpPass(): string
+    {
+        return self::$smtpPass;
+    }
+
+    public static function getSmtpFromEmail(): string
+    {
+        return self::$smtpFromEmail;
+    }
+
+    public static function getSmtpFromName(): string
+    {
+        return self::$smtpFromName;
+    }
+
+    public static function isSmtpAuth(): bool
+    {
+        if (self::$smtpAuth !== null) {
+            return self::$smtpAuth;
+        }
+
+        return self::$smtpUser !== '';
+    }
+
+    /**
+     * @return string[]
+     */
+    public static function getCorsOrigins(): array
+    {
+        return self::$corsOrigins;
     }
 
     public static function resolveLogLevel(): int

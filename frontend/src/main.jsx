@@ -2,6 +2,7 @@ import './index.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
 import { ThemeProvider as MuiThemeProvider, CssBaseline } from '@mui/material';
 import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
@@ -18,6 +19,7 @@ export { ThemeWrapper };
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter basename={import.meta.env.BASE_URL}>
+      <HelmetProvider>
       <AuthProvider>
         <ThemeProvider>
           <ThemeWrapper>
@@ -28,6 +30,7 @@ createRoot(document.getElementById('root')).render(
           </ThemeWrapper>
         </ThemeProvider>
       </AuthProvider>
+      </HelmetProvider>
     </BrowserRouter>
   </StrictMode>
 );

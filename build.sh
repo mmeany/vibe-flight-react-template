@@ -73,6 +73,7 @@ cp "$SCRIPT_DIR/backend/composer.lock" "$SCRIPT_DIR/dist/"
 echo
 echo "=== Copying backend source ==="
 cp -r "$SCRIPT_DIR/backend/app" "$SCRIPT_DIR/dist/"
+cp -r "$SCRIPT_DIR/backend/migrations" "$SCRIPT_DIR/dist/"
 
 echo
 echo "=== Copying frontend build output ==="
@@ -113,7 +114,7 @@ HTEOF
 
 echo
 echo "=== Copying .env.example ==="
-cp "$SCRIPT_DIR/backend/.env.example" "$SCRIPT_DIR/dist/.env.example"
+cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/dist/.env.example"
 
 echo
 echo "=== Creating logs directory ==="

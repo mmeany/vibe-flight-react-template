@@ -4,6 +4,7 @@ import {
   Info as InfoIcon,
   Logout as LogoutIcon,
   Menu as MenuIcon,
+  Inbox as InboxIcon,
   People as PeopleIcon,
   Settings as SettingsIcon,
 } from '@mui/icons-material';
@@ -101,10 +102,16 @@ export default function Header() {
           <ListItemText primary="About" />
         </ListItemButton>
         {isAdmin && (
-          <ListItemButton onClick={() => navigateTo('/admin/users')}>
-            <ListItemIcon><PeopleIcon /></ListItemIcon>
-            <ListItemText primary="Users" />
-          </ListItemButton>
+          <>
+            <ListItemButton onClick={() => navigateTo('/admin/submissions')}>
+              <ListItemIcon><InboxIcon /></ListItemIcon>
+              <ListItemText primary="Submissions" />
+            </ListItemButton>
+            <ListItemButton onClick={() => navigateTo('/admin/users')}>
+              <ListItemIcon><PeopleIcon /></ListItemIcon>
+              <ListItemText primary="Users" />
+            </ListItemButton>
+          </>
         )}
       </List>
       <List>
@@ -171,10 +178,16 @@ export default function Header() {
           About
         </MenuItem>
         {isAdmin && (
-          <MenuItem onClick={() => navigateTo('/admin/users')}>
-            <ListItemIcon><PeopleIcon fontSize="small" /></ListItemIcon>
-            Users
-          </MenuItem>
+          <>
+            <MenuItem onClick={() => navigateTo('/admin/submissions')}>
+              <ListItemIcon><InboxIcon fontSize="small" /></ListItemIcon>
+              Submissions
+            </MenuItem>
+            <MenuItem onClick={() => navigateTo('/admin/users')}>
+              <ListItemIcon><PeopleIcon fontSize="small" /></ListItemIcon>
+              Users
+            </MenuItem>
+          </>
         )}
         <MenuItem onClick={openLogoutDialog}>
           <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
