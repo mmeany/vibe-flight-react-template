@@ -9,6 +9,7 @@ Use this file (and linked guides) to bring an **existing fork** of `vibe-flight-
 | [update.md](update.md) | Frontend only | `/` is still the signed-in dashboard; guests go to `/login` |
 | **Rolling log files** ([below](#rolling-log-files-backend-only)) | Backend only (~10 min) | Single growing `app.log`, or logs under `app/logs/` instead of deploy-root `logs/` |
 | **Contact Us + legal + GA4** ([below](#contact-us-legal-pages-cookie-consent-and-ga4)) | Full-stack | Missing contact form, SMTP, rate limits, `/terms`, cookie banner, admin submissions |
+| **Admin submissions list UX** ([below](#admin-submissions-search-sort-and-pagination)) | Full-stack (~30 min) | `/admin/submissions` lists all rows on one page; no search, column sort, status filter, or pagination controls |
 | **Email-verified registration** ([below](#email-verified-registration)) | Full-stack | Registration is single-step (`POST /register` creates user immediately); no email verification, human check, or admin notify on sign-up |
 
 Apply guides **independently** — you do not need the contact update to apply rolling logs, and vice versa.
@@ -148,7 +149,7 @@ If your fork still uses `/` as the signed-in dashboard, apply [update.md](update
 | Legal | Public `/terms` and `/privacy` with shared layout and footer links |
 | Cookie consent | Opt-in banner (`app_consent` cookie); analytics category |
 | GA4 | Consent-gated Google Analytics; manual SPA pageviews |
-| Admin | `/admin/submissions` — list, ignore, send follow-up; status chips **New** / **Replied** (green) / **Ignored** |
+| Admin | `/admin/submissions` — tap/click row for details, ignore (red no-entry icon), send follow-up; status chips **New** / **Replied** (green) / **Ignored** — see [Admin submissions list UX](#admin-submissions-search-sort-and-pagination) for search, sort, and pagination |
 
 ```mermaid
 flowchart LR
@@ -406,6 +407,16 @@ Status column uses MUI `Chip` with three states (no backend change — `follow_u
 
 Priority: **Ignored** wins over **Replied** if both apply. After sending a follow-up via `POST /api/v1/admin/submissions/:id/reply`, the list row should show **Replied** without a page reload (the reply handler already merges the updated submission into state).
 
+**Row interactions** (no separate view icon):
+
+| Interaction | Behaviour |
+|-------------|-----------|
+| Tap/click row | Opens submission detail dialog (mobile-friendly) |
+| Ignore button | MUI `Block` icon, `color="error"` (red no-entry); toggles ignored state |
+| Reply button | Opens reply dialog; `stopPropagation` on actions column so row click does not fire |
+
+For search, column sorting, status filter, and pagination UI, apply [Admin submissions search, sort, and pagination](#admin-submissions-search-sort-and-pagination).
+
 ---
 
 ## Step 8 — Build and deploy
@@ -446,7 +457,7 @@ Keep `legalContent.privacy` and `cookieConsentContent.js` in sync when cookie or
 |--------|------|------|----------|
 | `GET` | `/api/v1/challenge` | Public | `{ question, token, form_loaded_at }` |
 | `POST` | `/api/v1/contact` | Public | 201 / 422 / 429 |
-| `GET` | `/api/v1/admin/submissions` | Admin JWT | Paginated list (`?include_ignored`, `?page`, `?per_page`) |
+| `GET` | `/api/v1/admin/submissions` | Admin JWT | Paginated list — see [query params](#admin-submissions-search-sort-and-pagination) below |
 | `PATCH` | `/api/v1/admin/submissions/:id/ignore` | Admin JWT | `{ ignored: true\|false }` |
 | `POST` | `/api/v1/admin/submissions/:id/reply` | Admin JWT | `{ message }` → sends follow-up email |
 
@@ -481,7 +492,7 @@ Contact submit body:
 - [ ] `/terms` and `/privacy` load without login
 - [ ] Cookie banner shows on landing; hidden on `/admin/*`
 - [ ] GA4 network requests appear **only** after accepting analytics (production build)
-- [ ] Admin **Submissions** lists entries; ignore and reply work
+- [ ] Admin **Submissions** lists entries; tap/click row opens details; ignore and reply work
 - [ ] After admin follow-up reply, status shows **Replied** with green (`success`) chip — not **New**
 
 ---
@@ -495,10 +506,202 @@ Contact submit body:
 | Submit 429 | Rate limit hit | Wait or test with a different email |
 | No auto-ack email | SMTP misconfigured | Check `SMTP_*`, Mailpit, `logs/app-*.log` for `smtp.send_failed` |
 | Submission status stuck on **New** after reply | Status chip only checks `ignored` | Also check `follow_up_sent_at`; use `color="success"` for **Replied** |
+| Admin list shows only first 25 rows | Pagination API exists but UI not wired | Apply [Admin submissions list UX](#admin-submissions-search-sort-and-pagination) |
 | CORS error from Vite | Origin not in `CORS_ORIGINS` | Add `http://localhost:5173` |
 | DB error on boot | Migration failed | Check `schema_migrations` table; verify SQL ran |
 | GA on localhost | Expected — GA disabled outside production | Test with production build + `VITE_GA_MEASUREMENT_ID` |
 | `backend/.env` still used | AppConfig fallback | Move all vars to root `.env` |
+
+---
+
+## Admin submissions search, sort, and pagination
+
+Apply this section to forks that already have the contact-form admin UI (`/admin/submissions`) but list every submission on a single page with no search, sort controls, or pagination bar.
+
+**Scope:** full-stack — `SubmissionRepository`, `ContactService`, `AdminSubmissionController`, `adminSubmissions.js`, `AdminSubmissionsPage.jsx`, and a new repository test. No database migration or new npm/composer packages.
+
+Requires the [Contact Us](#contact-us-legal-pages-cookie-consent-and-ga4) admin API (`GET /api/v1/admin/submissions` with `page` / `per_page` / `include_ignored`). The API already paginates server-side; this update wires the UI and adds search, status filter, and column sorting.
+
+---
+
+### What changes
+
+| Before | After |
+|--------|--------|
+| UI loads page 1 only; no pagination bar | MUI `TablePagination` — rows/page **10**, **25**, **50** (default 25) |
+| `ORDER BY created_at DESC` only | Clickable sort on **Email**, **Received**, **Status** |
+| No search | Debounced search (~300 ms) on **email**, **known_as**, **question** (min 2 chars) |
+| "Show ignored" toggle only | + **Status** dropdown: All / New / Replied |
+| `meta.total` shown but not used for paging | Total reflects filtered result set across all pages |
+| Separate view (eye) icon per row | **Tap/click entire row** opens detail dialog (better on mobile) |
+| Ignore action uses mail-read icon | **Block** icon (`color="error"`) — red no-entry sign |
+
+```mermaid
+flowchart LR
+  subgraph ui [AdminSubmissionsPage]
+    search[Search field]
+    statusFilter[Status dropdown]
+    sort[TableSortLabel headers]
+    pager[TablePagination]
+  end
+  subgraph api [GET /admin/submissions]
+    q[search sort order status page per_page include_ignored]
+  end
+  search --> q
+  statusFilter --> q
+  sort --> q
+  pager --> q
+```
+
+**Out of scope (v1):** URL query-string sync, category filter, frontend component tests, full-text search indexes.
+
+---
+
+### API — extended query parameters
+
+`GET /api/v1/admin/submissions` (Admin JWT). Existing params unchanged; new optional params:
+
+| Param | Values | Default | Notes |
+|-------|--------|---------|-------|
+| `search` | string | — | Min 2 characters server-side; empty or omitted = no text filter |
+| `sort` | `created_at`, `email`, `status` | `created_at` | `status` is derived: New → Replied → Ignored |
+| `order` | `asc`, `desc` | `desc` | Unknown values fall back to defaults |
+| `status` | `all`, `new`, `replied` | `all` | Workflow filter — not HTTP status |
+| `page` | int ≥ 1 | `1` | 1-based |
+| `per_page` | int 1–100 | `25` | |
+| `include_ignored` | bool | `false` | When `false`, `ignored = 0` rows only |
+
+**Status filter semantics** (combined with `include_ignored`):
+
+| `status` | SQL predicate |
+|----------|----------------|
+| `all` | No extra status predicate |
+| `new` | `ignored = 0 AND follow_up_sent_at IS NULL` |
+| `replied` | `follow_up_sent_at IS NOT NULL` |
+
+**Search** matches (case-sensitive `LIKE %term%`):
+
+- `submissions.email`
+- `JSON_UNQUOTE(JSON_EXTRACT(payload, '$.question'))`
+- `JSON_UNQUOTE(JSON_EXTRACT(payload, '$.known_as'))`
+
+**Sort by status** uses a `CASE` expression (not a DB column):
+
+```sql
+CASE
+  WHEN ignored = 1 THEN 2
+  WHEN follow_up_sent_at IS NOT NULL THEN 1
+  ELSE 0
+END
+```
+
+Always append `id DESC` as a secondary sort for stable pagination.
+
+Response `meta` includes `total`, `page`, `per_page`, and (optionally) `sort` / `order` echoing the applied values.
+
+---
+
+### Step 1 — Patch backend files
+
+#### `app/Repositories/SubmissionRepository.php`
+
+- Introduce a list-query value object or typed array (e.g. `SubmissionListQuery`) holding `includeIgnored`, `search`, `status`, `sort`, `order`, `limit`, `offset`.
+- Add a private `buildWhereClause()` used by **both** `listSubmissions()` and `countSubmissions()` so `meta.total` always matches the filtered page.
+- Replace hardcoded `ORDER BY created_at DESC` with allowlisted sort columns.
+- Bind `LIMIT` / `OFFSET` as integers (existing pattern).
+
+#### `app/Services/ContactService.php`
+
+- Extend `listSubmissions()` to accept and pass through the new filter/sort params.
+
+#### `app/Controllers/AdminSubmissionController.php`
+
+- Parse `search`, `sort`, `order`, and `status` from `$_GET`.
+- Sanitize against allowlists; pass to `ContactService`.
+
+---
+
+### Step 2 — Copy new backend test
+
+| File | Role |
+|------|------|
+| `tests/SubmissionRepositoryTest.php` | Asserts SQL fragments for search, status filter, sort, and pagination bindings (mocked PDO — same style as `PendingRegistrationRepositoryTest.php`) |
+
+---
+
+### Step 3 — Patch frontend files
+
+#### `src/api/adminSubmissions.js`
+
+Extend `listSubmissions()`:
+
+```js
+listSubmissions({
+  page = 1,
+  perPage = 25,
+  includeIgnored = false,
+  search = '',
+  sort = 'created_at',
+  order = 'desc',
+  status = 'all',
+} = {})
+```
+
+Map to snake_case query params: `search`, `sort`, `order`, `status`, `page`, `per_page`, `include_ignored`.
+
+#### `src/pages/AdminSubmissionsPage.jsx`
+
+| UI element | Behaviour |
+|------------|-----------|
+| Search `TextField` | Debounce ~300 ms; only search when empty or length ≥ 2; clear (×) button; resets `page` to 1 |
+| Status `Select` | All / New / Replied — resets `page` to 1 |
+| "Show ignored" switch | Unchanged — resets `page` to 1 |
+| `TableSortLabel` | On Email, Received, Status; toggles asc/desc; resets `page` to 1 |
+| `TablePagination` | Below table; `rowsPerPageOptions={[10, 25, 50]}`; MUI page is 0-based, API is 1-based |
+| Header count | `{meta.total} submission(s)` — filtered total, not current page length |
+| Row click / tap | `TableRow` `onClick` opens detail dialog; `cursor: pointer`; Enter/Space for keyboard; no view icon |
+| Ignore action | `Block` icon on `IconButton` with `color="error"`; tooltip toggles "Mark ignored" / "Unignore" |
+| Reply action | `Email` icon in actions column; `onClick` on actions `TableCell` calls `stopPropagation()` so ignore/reply do not open the detail dialog |
+
+**Fetch:** single `loadSubmissions` callback (like `loadUsers` on the admin users page). `useEffect` depends on `includeIgnored`, `page`, `perPage`, debounced search, `sort`, `order`, and `statusFilter`.
+
+**Post-action (ignore / reply):**
+
+- Update the row in local state in place (existing behaviour).
+- If `statusFilter !== 'all'`, refetch the current page after success — the row may no longer match the filter.
+
+**URL state:** React state only — list params are **not** synced to the browser URL in v1.
+
+Status chips (New / Replied / Ignored) are unchanged — see [Step 7 — AdminSubmissionsPage](#step-7--patch-existing-frontend-files) in the Contact Us section.
+
+---
+
+### Verification checklist
+
+- [ ] `composer test` passes in `backend/` (includes `SubmissionRepositoryTest`)
+- [ ] Default load: page 1, 25 rows, newest first (`created_at desc`)
+- [ ] Pagination: next/prev, change rows per page, `meta.total` updates
+- [ ] Search debounces; fewer than 2 characters clears the filter; matches email, known_as, and message text
+- [ ] Sort: each column toggles asc/desc; status order is New → Replied → Ignored
+- [ ] Status filter **New** shows only unreplied non-ignored rows; **Replied** shows rows with `follow_up_sent_at`
+- [ ] "Show ignored" still controls whether ignored rows appear when status is **All**
+- [ ] Ignore/reply with an active status filter refetches; without filter, row updates in place
+- [ ] After follow-up reply, status chip shows **Replied** (green) without manual reload
+- [ ] Tap/click a row (not the action buttons) opens the submission detail dialog
+- [ ] Ignore button shows red **Block** (no-entry) icon; reply button does not open the detail dialog
+
+---
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Tapping ignore/reply opens detail dialog | Row click not stopped on actions column | `stopPropagation()` on the actions `TableCell` or each action `IconButton` |
+| Total count wrong after search | `countSubmissions()` missing shared WHERE | Use same `buildWhereClause()` for list and count |
+| Search returns nothing for known names | Searching wrong JSON keys | Match `$.known_as` and `$.question`, not `firstname`/`surname` |
+| Page 2 empty but total > per_page | Frontend not passing `page` | Wire `TablePagination` `onPageChange` to API `page` (1-based) |
+| Row stays visible after ignore with **New** filter | No refetch on filtered view | Refetch when `statusFilter !== 'all'` after ignore/reply |
+| Sort by status looks random | Missing secondary sort | Append `id DESC` after status `CASE` |
 
 ---
 
@@ -740,7 +943,7 @@ Copy files from the upstream template commit that introduced this update:
 | Doc | Purpose |
 |-----|---------|
 | [guideline.md](guideline.md) | Feature spec and design rationale |
-| [guidelines_update.md](guidelines_update.md) | Migration hub: rolling logs + contact/legal/GA4 + email-verified registration |
+| [guidelines_update.md](guidelines_update.md) | Migration hub: rolling logs + contact/legal/GA4 + admin submissions list UX + email-verified registration |
 | [update.md](update.md) | Guest landing page routing (prerequisite for some forks) |
 | [DEPLOY.md](DEPLOY.md) | Production build, env vars, log paths |
 

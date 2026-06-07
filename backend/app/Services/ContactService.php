@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\DTOs\SubmissionCreateDto;
+use App\DTOs\SubmissionListQuery;
 use App\Http\Response;
 use App\Repositories\SubmissionRepository;
 use App\Support\ClientIp;
@@ -78,15 +79,19 @@ class ContactService
     }
 
     /**
-     * @return array{items: array<int, array<string, mixed>>, total: int}
+     * @return array{items: array<int, array<string, mixed>>, total: int, sort: string, order: string}
      */
-    public function listSubmissions(bool $includeIgnored, int $page, int $perPage): array
+    public function listSubmissions(SubmissionListQuery $query): array
     {
-        $offset = ($page - 1) * $perPage;
-        $items = $this->submissionRepository->listSubmissions($includeIgnored, $perPage, $offset);
-        $total = $this->submissionRepository->countSubmissions($includeIgnored);
+        $items = $this->submissionRepository->listSubmissions($query);
+        $total = $this->submissionRepository->countSubmissions($query);
 
-        return ['items' => $items, 'total' => $total];
+        return [
+            'items' => $items,
+            'total' => $total,
+            'sort' => $query->sort,
+            'order' => $query->order,
+        ];
     }
 
     public function setIgnored(int $id, bool $ignored): array

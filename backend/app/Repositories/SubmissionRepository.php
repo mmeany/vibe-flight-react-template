@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Repositories;
 
 use App\Database\Database;
+use App\DTOs\SubmissionListQuery;
 use PDO;
 
 class SubmissionRepository
@@ -40,19 +41,22 @@ class SubmissionRepository
     /**
      * @return array<int, array<string, mixed>>
      */
-    public function listSubmissions(bool $includeIgnored, int $limit, int $offset): array
+    public function listSubmissions(SubmissionListQuery $query): array
     {
+        $where = $this->buildWhereClause($query);
         $sql = 'SELECT id, email, payload, ignored, follow_up_response, created_at,
                        auto_response_sent_at, follow_up_sent_at
-                FROM submissions';
-        if (!$includeIgnored) {
-            $sql .= ' WHERE ignored = 0';
-        }
-        $sql .= ' ORDER BY created_at DESC LIMIT :limit OFFSET :offset';
+                FROM submissions'
+            . $where['sql']
+            . $this->buildOrderClause($query)
+            . ' LIMIT :limit OFFSET :offset';
 
         $stmt = $this->db->getPdo()->prepare($sql);
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        foreach ($where['params'] as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->bindValue(':limit', $query->perPage, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $query->offset(), PDO::PARAM_INT);
         $stmt->execute();
 
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -66,14 +70,61 @@ class SubmissionRepository
         }, $rows);
     }
 
-    public function countSubmissions(bool $includeIgnored): int
+    public function countSubmissions(SubmissionListQuery $query): int
     {
-        $sql = 'SELECT COUNT(*) FROM submissions';
-        if (!$includeIgnored) {
-            $sql .= ' WHERE ignored = 0';
+        $where = $this->buildWhereClause($query);
+        $sql = 'SELECT COUNT(*) FROM submissions' . $where['sql'];
+        $stmt = $this->db->getPdo()->prepare($sql);
+        foreach ($where['params'] as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->execute();
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * @return array{sql: string, params: array<string, string>}
+     */
+    private function buildWhereClause(SubmissionListQuery $query): array
+    {
+        $conditions = [];
+        $params = [];
+
+        if (!$query->includeIgnored) {
+            $conditions[] = 'ignored = 0';
         }
 
-        return (int) $this->db->getPdo()->query($sql)->fetchColumn();
+        if ($query->status === 'new') {
+            $conditions[] = 'ignored = 0';
+            $conditions[] = 'follow_up_sent_at IS NULL';
+        } elseif ($query->status === 'replied') {
+            $conditions[] = 'follow_up_sent_at IS NOT NULL';
+        }
+
+        if ($query->search !== '') {
+            $conditions[] = '(email LIKE :search'
+                . " OR JSON_UNQUOTE(JSON_EXTRACT(payload, '$.question')) LIKE :search"
+                . " OR JSON_UNQUOTE(JSON_EXTRACT(payload, '$.known_as')) LIKE :search)";
+            $params[':search'] = '%' . $query->search . '%';
+        }
+
+        $sql = $conditions === [] ? '' : ' WHERE ' . implode(' AND ', $conditions);
+
+        return ['sql' => $sql, 'params' => $params];
+    }
+
+    private function buildOrderClause(SubmissionListQuery $query): string
+    {
+        $direction = $query->order === 'asc' ? 'ASC' : 'DESC';
+
+        $primarySort = match ($query->sort) {
+            'email' => 'email ' . $direction,
+            'status' => 'CASE WHEN ignored = 1 THEN 2 WHEN follow_up_sent_at IS NOT NULL THEN 1 ELSE 0 END ' . $direction,
+            default => 'created_at ' . $direction,
+        };
+
+        return ' ORDER BY ' . $primarySort . ', id DESC';
     }
 
     /**

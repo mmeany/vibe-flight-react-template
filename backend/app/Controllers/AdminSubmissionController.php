@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\DTOs\SubmissionListQuery;
 use App\Http\Response;
 use App\Services\ContactService;
 
@@ -15,15 +16,14 @@ class AdminSubmissionController
 
     public function index(): void
     {
-        $includeIgnored = filter_var($_GET['include_ignored'] ?? 'false', FILTER_VALIDATE_BOOLEAN);
-        $page = max(1, (int) ($_GET['page'] ?? 1));
-        $perPage = min(100, max(1, (int) ($_GET['per_page'] ?? 25)));
-
-        $result = $this->contactService->listSubmissions($includeIgnored, $page, $perPage);
+        $query = SubmissionListQuery::fromRequestParams($_GET);
+        $result = $this->contactService->listSubmissions($query);
         Response::successWithMeta($result['items'], [
             'total' => $result['total'],
-            'page' => $page,
-            'per_page' => $perPage,
+            'page' => $query->page,
+            'per_page' => $query->perPage,
+            'sort' => $result['sort'],
+            'order' => $result['order'],
         ]);
     }
 

@@ -1,7 +1,7 @@
 import {
+  Block as BlockIcon,
+  Clear as ClearIcon,
   Email as EmailIcon,
-  MarkEmailRead as MarkEmailReadIcon,
-  Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import {
   Alert,
@@ -12,9 +12,14 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   FormControlLabel,
   IconButton,
+  InputAdornment,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Switch,
   Table,
@@ -22,12 +27,14 @@ import {
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
+  TableSortLabel,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   listSubmissions,
   replyToSubmission,
@@ -63,7 +70,14 @@ function SubmissionStatusChip({ submission }) {
 export default function AdminSubmissionsPage() {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
   const [includeIgnored, setIncludeIgnored] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [sort, setSort] = useState('created_at');
+  const [order, setOrder] = useState('desc');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
@@ -73,30 +87,56 @@ export default function AdminSubmissionsPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    let active = true;
-    (async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const result = await listSubmissions({ includeIgnored });
-        if (active) {
-          setItems(result.items);
-          setTotal(result.meta?.total ?? result.items.length);
-        }
-      } catch (err) {
-        if (active) {
-          setError(err.message ?? 'Failed to load submissions.');
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [includeIgnored]);
+    const timer = setTimeout(() => {
+      const term = searchInput.trim();
+      const nextSearch = term.length >= 2 ? term : '';
+      setDebouncedSearch(nextSearch);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const loadSubmissions = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await listSubmissions({
+        page,
+        perPage,
+        includeIgnored,
+        search: debouncedSearch,
+        sort,
+        order,
+        status: statusFilter,
+      });
+      setItems(result.items);
+      setTotal(result.meta?.total ?? result.items.length);
+    } catch (err) {
+      setError(err.message ?? 'Failed to load submissions.');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, perPage, includeIgnored, debouncedSearch, sort, order, statusFilter]);
+
+  useEffect(() => {
+    loadSubmissions();
+  }, [loadSubmissions]);
+
+  const handleSort = (column) => {
+    if (sort === column) {
+      setOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSort(column);
+      setOrder(column === 'created_at' ? 'desc' : 'asc');
+    }
+    setPage(1);
+  };
+
+  const maybeRefetchAfterAction = async () => {
+    if (statusFilter !== 'all') {
+      await loadSubmissions();
+    }
+  };
 
   const handleToggleIgnored = async (submission) => {
     setActionError('');
@@ -106,6 +146,7 @@ export default function AdminSubmissionsPage() {
       if (selected?.id === updated.id) {
         setSelected(updated);
       }
+      await maybeRefetchAfterAction();
     } catch (err) {
       setActionError(err.message ?? 'Failed to update submission.');
     }
@@ -121,6 +162,7 @@ export default function AdminSubmissionsPage() {
       setSelected(updated);
       setReplyOpen(false);
       setReplyMessage('');
+      await maybeRefetchAfterAction();
     } catch (err) {
       setActionError(err.message ?? 'Failed to send reply.');
     } finally {
@@ -140,78 +182,181 @@ export default function AdminSubmissionsPage() {
           </Typography>
         </Box>
 
-        <FormControlLabel
-          control={
-            <Switch
-              checked={includeIgnored}
-              onChange={event => setIncludeIgnored(event.target.checked)}
-            />
-          }
-          label="Show ignored"
-        />
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={2}
+          alignItems={{ xs: 'stretch', sm: 'center' }}
+          flexWrap="wrap"
+        >
+          <TextField
+            label="Search"
+            placeholder="Email, known as, or message"
+            value={searchInput}
+            onChange={event => setSearchInput(event.target.value)}
+            size="small"
+            sx={{ minWidth: 220, flexGrow: 1 }}
+            slotProps={{
+              input: {
+                endAdornment: searchInput ? (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="Clear search"
+                      onClick={() => setSearchInput('')}
+                      edge="end"
+                      size="small"
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null,
+              },
+            }}
+          />
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel id="submission-status-filter-label">Status</InputLabel>
+            <Select
+              labelId="submission-status-filter-label"
+              label="Status"
+              value={statusFilter}
+              onChange={event => {
+                setStatusFilter(event.target.value);
+                setPage(1);
+              }}
+            >
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="new">New</MenuItem>
+              <MenuItem value="replied">Replied</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={includeIgnored}
+                onChange={event => {
+                  setIncludeIgnored(event.target.checked);
+                  setPage(1);
+                }}
+              />
+            }
+            label="Show ignored"
+          />
+        </Stack>
 
         {error && <Alert severity="error">{error}</Alert>}
         {actionError && <Alert severity="error">{actionError}</Alert>}
 
-        <TableContainer component={Paper} variant="outlined">
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Email</TableCell>
-                <TableCell>Category</TableCell>
-                <TableCell>Received</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {loading && (
+        <Paper variant="outlined">
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
                 <TableRow>
-                  <TableCell colSpan={5}>Loading…</TableCell>
-                </TableRow>
-              )}
-              {!loading && items.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5}>No submissions found.</TableCell>
-                </TableRow>
-              )}
-              {!loading && items.map(submission => (
-                <TableRow key={submission.id} hover>
-                  <TableCell>{submission.email}</TableCell>
-                  <TableCell>{categoryLabel(submission.payload)}</TableCell>
-                  <TableCell>{formatDate(submission.created_at)}</TableCell>
-                  <TableCell>
-                    <SubmissionStatusChip submission={submission} />
+                  <TableCell sortDirection={sort === 'email' ? order : false}>
+                    <TableSortLabel
+                      active={sort === 'email'}
+                      direction={sort === 'email' ? order : 'asc'}
+                      onClick={() => handleSort('email')}
+                    >
+                      Email
+                    </TableSortLabel>
                   </TableCell>
-                  <TableCell align="right">
-                    <Tooltip title="View details">
-                      <IconButton onClick={() => setSelected(submission)} size="small">
-                        <VisibilityIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title={submission.ignored ? 'Unignore' : 'Mark ignored'}>
-                      <IconButton onClick={() => handleToggleIgnored(submission)} size="small">
-                        <MarkEmailReadIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Send reply">
-                      <IconButton
-                        onClick={() => {
-                          setSelected(submission);
-                          setReplyMessage(submission.follow_up_response ?? '');
-                          setReplyOpen(true);
-                        }}
-                        size="small"
-                      >
-                        <EmailIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                  <TableCell>Category</TableCell>
+                  <TableCell sortDirection={sort === 'created_at' ? order : false}>
+                    <TableSortLabel
+                      active={sort === 'created_at'}
+                      direction={sort === 'created_at' ? order : 'desc'}
+                      onClick={() => handleSort('created_at')}
+                    >
+                      Received
+                    </TableSortLabel>
                   </TableCell>
+                  <TableCell sortDirection={sort === 'status' ? order : false}>
+                    <TableSortLabel
+                      active={sort === 'status'}
+                      direction={sort === 'status' ? order : 'asc'}
+                      onClick={() => handleSort('status')}
+                    >
+                      Status
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell align="right">Actions</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {loading && (
+                  <TableRow>
+                    <TableCell colSpan={5}>Loading…</TableCell>
+                  </TableRow>
+                )}
+                {!loading && items.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5}>No submissions found.</TableCell>
+                  </TableRow>
+                )}
+                {!loading && items.map(submission => (
+                  <TableRow
+                    key={submission.id}
+                    hover
+                    onClick={() => setSelected(submission)}
+                    sx={{ cursor: 'pointer' }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`View submission from ${submission.email}`}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setSelected(submission);
+                      }
+                    }}
+                  >
+                    <TableCell>{submission.email}</TableCell>
+                    <TableCell>{categoryLabel(submission.payload)}</TableCell>
+                    <TableCell>{formatDate(submission.created_at)}</TableCell>
+                    <TableCell>
+                      <SubmissionStatusChip submission={submission} />
+                    </TableCell>
+                    <TableCell align="right" onClick={event => event.stopPropagation()}>
+                      <Tooltip title={submission.ignored ? 'Unignore' : 'Mark ignored'}>
+                        <IconButton
+                          onClick={() => handleToggleIgnored(submission)}
+                          size="small"
+                          color="error"
+                          aria-label={submission.ignored ? 'Unignore submission' : 'Mark submission ignored'}
+                        >
+                          <BlockIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Send reply">
+                        <IconButton
+                          onClick={() => {
+                            setSelected(submission);
+                            setReplyMessage(submission.follow_up_response ?? '');
+                            setReplyOpen(true);
+                          }}
+                          size="small"
+                          aria-label="Send reply"
+                        >
+                          <EmailIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          <TablePagination
+            component="div"
+            count={total}
+            page={Math.max(0, page - 1)}
+            onPageChange={(_, nextPage) => setPage(nextPage + 1)}
+            rowsPerPage={perPage}
+            onRowsPerPageChange={event => {
+              setPerPage(parseInt(event.target.value, 10));
+              setPage(1);
+            }}
+            rowsPerPageOptions={[10, 25, 50]}
+          />
+        </Paper>
       </Stack>
 
       <Dialog open={Boolean(selected) && !replyOpen} onClose={() => setSelected(null)} maxWidth="sm" fullWidth>
