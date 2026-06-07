@@ -6,7 +6,6 @@ namespace App\Services;
 
 use App\Config\AppConfig;
 use App\Http\Response;
-use App\Models\User;
 use App\Repositories\UserRepository;
 use App\Utils\JwtUtil;
 use App\Utils\UserValidation;
@@ -18,46 +17,6 @@ class AuthService
         private readonly UserRepository $userRepository,
         private readonly LoggerInterface $logger,
     ) {}
-
-    public function register(string $username, string $email, string $password, string $passwordReminder): User
-    {
-        if (!AppConfig::isRegistrationEnabled()) {
-            Response::forbidden('Registration is currently disabled');
-            exit;
-        }
-
-        $errors = UserValidation::validateRegistration($username, $email, $password, $passwordReminder);
-        if ($errors !== []) {
-            Response::validationError(implode(' ', $errors));
-            exit;
-        }
-
-        if ($this->userRepository->findByUsername($username) !== null) {
-            Response::conflict('Username already taken');
-            exit;
-        }
-
-        if ($this->userRepository->findByEmail($email) !== null) {
-            Response::conflict('Email already registered');
-            exit;
-        }
-
-        $passwordHash = UserValidation::hashPassword($password);
-
-        $settings = [
-            'theme_mode' => 'light',
-            'date_format' => 'MM/DD/YYYY',
-            'user_alias' => $username,
-        ];
-
-        return $this->userRepository->create(
-            $username,
-            $email,
-            $passwordHash,
-            trim($passwordReminder),
-            $settings,
-        );
-    }
 
     public function login(string $username, string $password): array
     {

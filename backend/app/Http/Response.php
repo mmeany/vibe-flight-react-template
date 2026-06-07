@@ -66,6 +66,16 @@ class Response
         self::error($message, 'RATE_LIMIT', 429);
     }
 
+    public static function gone(string $message): void
+    {
+        self::error($message, 'GONE', 410);
+    }
+
+    public static function serviceUnavailable(string $message): void
+    {
+        self::error($message, 'SERVICE_UNAVAILABLE', 503);
+    }
+
     public static function serverError(string $message = 'Internal server error'): void
     {
         self::error($message, 'SERVER_ERROR', 500);

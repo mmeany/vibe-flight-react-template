@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { ApiError } from './errors';
 import { TOKEN_KEY } from './storage';
 
 const apiClient = axios.create({
@@ -17,9 +18,11 @@ apiClient.interceptors.request.use(config => {
 apiClient.interceptors.response.use(
   response => response,
   error => {
-    const message = error.response?.data?.error?.message;
-    if (message) {
-      return Promise.reject(new Error(message));
+    const payload = error.response?.data?.error;
+    if (payload?.message) {
+      return Promise.reject(
+        new ApiError(payload.message, error.response?.status ?? 0, payload.code ?? ''),
+      );
     }
     return Promise.reject(error);
   },

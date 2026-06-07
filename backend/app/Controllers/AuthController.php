@@ -6,11 +6,13 @@ namespace App\Controllers;
 
 use App\Http\Response;
 use App\Services\AuthService;
+use App\Services\RegistrationService;
 
 class AuthController
 {
     public function __construct(
         private readonly AuthService $authService,
+        private readonly RegistrationService $registrationService,
     ) {}
 
     public function register(): void
@@ -22,8 +24,48 @@ class AuthController
         $password = $body['password'] ?? '';
         $passwordReminder = $body['password_reminder'] ?? '';
 
-        $user = $this->authService->register($username, $email, $password, $passwordReminder);
-        Response::created($user->toArray());
+        $result = $this->registrationService->startRegistration(
+            $username,
+            $email,
+            $password,
+            $passwordReminder,
+            trim($body['website'] ?? $body['_website'] ?? ''),
+            trim($body['challenge_token'] ?? ''),
+            trim($body['challenge_answer'] ?? ''),
+            (int) ($body['form_loaded_at'] ?? 0),
+        );
+        Response::created($result);
+    }
+
+    public function verifyRegistration(): void
+    {
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $pendingToken = trim($body['pending_token'] ?? '');
+        $code = trim($body['code'] ?? '');
+
+        if ($pendingToken === '' || $code === '') {
+            Response::unprocessableEntity('Pending token and verification code are required.');
+            exit;
+        }
+
+        $result = $this->registrationService->verifyRegistration($pendingToken, $code);
+        Response::success($result);
+    }
+
+    public function resendVerification(): void
+    {
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $pendingToken = trim($body['pending_token'] ?? '');
+
+        if ($pendingToken === '') {
+            Response::unprocessableEntity('Pending token is required.');
+            exit;
+        }
+
+        $result = $this->registrationService->resendVerification($pendingToken);
+        Response::success($result);
     }
 
     public function login(): void

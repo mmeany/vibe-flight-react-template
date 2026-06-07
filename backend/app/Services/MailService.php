@@ -36,6 +36,36 @@ class MailService {
         return $this->send($email, $subject, $body);
     }
 
+    public function sendVerificationCode(string $email, string $username, string $code): bool {
+        $subject = 'Your verification code';
+        $body = "Hi {$username},\n\n"
+            . "Your verification code is: {$code}\n\n"
+            . "This code expires in 15 minutes.\n\n"
+            . "If you did not request this, you can ignore this email.\n\n"
+            . 'Regards, the team at Just for Fun';
+
+        return $this->send($email, $subject, $body);
+    }
+
+    /**
+     * @param string[] $adminEmails
+     */
+    public function sendAdminNewUserNotification(array $adminEmails, string $username, string $email): bool {
+        $subject = 'New user registration';
+        $body = "A new user has completed registration:\n\n"
+            . "Username: {$username}\n"
+            . "Email: {$email}\n";
+
+        $allSent = true;
+        foreach ($adminEmails as $adminEmail) {
+            if (!$this->send($adminEmail, $subject, $body)) {
+                $allSent = false;
+            }
+        }
+
+        return $allSent;
+    }
+
     private function send(string $toEmail, string $subject, string $body): bool {
         $start = microtime(true);
         $this->logger->info('smtp.send_start', ['event' => 'smtp.send_start', 'to' => $toEmail]);

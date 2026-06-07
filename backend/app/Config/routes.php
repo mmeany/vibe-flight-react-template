@@ -19,6 +19,14 @@ $router->group('/api/v1', function (\flight\net\Router $router) use ($container)
         $container->get(AuthController::class)->register();
     });
 
+    $router->post('/register/verify', function () use ($container) {
+        $container->get(AuthController::class)->verifyRegistration();
+    });
+
+    $router->post('/register/resend', function () use ($container) {
+        $container->get(AuthController::class)->resendVerification();
+    });
+
     $router->post('/login', function () use ($container) {
         $container->get(AuthController::class)->login();
     });

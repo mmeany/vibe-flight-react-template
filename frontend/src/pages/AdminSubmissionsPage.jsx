@@ -50,6 +50,16 @@ function categoryLabel(payload) {
   return labels[category] ?? category;
 }
 
+function SubmissionStatusChip({ submission }) {
+  if (submission.ignored) {
+    return <Chip label="Ignored" size="small" color="default" />;
+  }
+  if (submission.follow_up_sent_at) {
+    return <Chip label="Replied" size="small" color="success" />;
+  }
+  return <Chip label="New" size="small" color="primary" />;
+}
+
 export default function AdminSubmissionsPage() {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -171,11 +181,7 @@ export default function AdminSubmissionsPage() {
                   <TableCell>{categoryLabel(submission.payload)}</TableCell>
                   <TableCell>{formatDate(submission.created_at)}</TableCell>
                   <TableCell>
-                    {submission.ignored ? (
-                      <Chip label="Ignored" size="small" color="default" />
-                    ) : (
-                      <Chip label="New" size="small" color="primary" />
-                    )}
+                    <SubmissionStatusChip submission={submission} />
                   </TableCell>
                   <TableCell align="right">
                     <Tooltip title="View details">

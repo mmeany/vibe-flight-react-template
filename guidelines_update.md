@@ -9,6 +9,7 @@ Use this file (and linked guides) to bring an **existing fork** of `vibe-flight-
 | [update.md](update.md) | Frontend only | `/` is still the signed-in dashboard; guests go to `/login` |
 | **Rolling log files** ([below](#rolling-log-files-backend-only)) | Backend only (~10 min) | Single growing `app.log`, or logs under `app/logs/` instead of deploy-root `logs/` |
 | **Contact Us + legal + GA4** ([below](#contact-us-legal-pages-cookie-consent-and-ga4)) | Full-stack | Missing contact form, SMTP, rate limits, `/terms`, cookie banner, admin submissions |
+| **Email-verified registration** ([below](#email-verified-registration)) | Full-stack | Registration is single-step (`POST /register` creates user immediately); no email verification, human check, or admin notify on sign-up |
 
 Apply guides **independently** — you do not need the contact update to apply rolling logs, and vice versa.
 
@@ -147,7 +148,7 @@ If your fork still uses `/` as the signed-in dashboard, apply [update.md](update
 | Legal | Public `/terms` and `/privacy` with shared layout and footer links |
 | Cookie consent | Opt-in banner (`app_consent` cookie); analytics category |
 | GA4 | Consent-gated Google Analytics; manual SPA pageviews |
-| Admin | `/admin/submissions` — list, ignore, send follow-up |
+| Admin | `/admin/submissions` — list, ignore, send follow-up; status chips **New** / **Replied** (green) / **Ignored** |
 
 ```mermaid
 flowchart LR
@@ -180,6 +181,7 @@ flowchart LR
 | `LOG_DIR=../../logs` or logs under `app/logs/` | `LOG_DIR=logs` at backend/deploy root + daily rotation — see [Rolling log files](#rolling-log-files-backend-only) |
 | No public legal routes | `/terms`, `/privacy` under `PublicLayout` |
 | Admin nav: Users only | **Submissions** + Users for `ADMIN_USERNAMES` |
+| Submission status always “New” | **Replied** (theme `success` / green) when `follow_up_sent_at` is set |
 
 ---
 
@@ -392,6 +394,18 @@ Wrap the app in `<HelmetProvider>`.
 
 - Add **Submissions** nav item (with Inbox icon) for admins, before **Users**.
 
+### `src/pages/AdminSubmissionsPage.jsx`
+
+Status column uses MUI `Chip` with three states (no backend change — `follow_up_sent_at` is already returned by the API):
+
+| Condition | Label | Chip `color` |
+|-----------|-------|--------------|
+| `submission.ignored` | Ignored | `default` |
+| `submission.follow_up_sent_at` set | Replied | `success` (green from theme) |
+| Otherwise | New | `primary` |
+
+Priority: **Ignored** wins over **Replied** if both apply. After sending a follow-up via `POST /api/v1/admin/submissions/:id/reply`, the list row should show **Replied** without a page reload (the reply handler already merges the updated submission into state).
+
 ---
 
 ## Step 8 — Build and deploy
@@ -468,6 +482,7 @@ Contact submit body:
 - [ ] Cookie banner shows on landing; hidden on `/admin/*`
 - [ ] GA4 network requests appear **only** after accepting analytics (production build)
 - [ ] Admin **Submissions** lists entries; ignore and reply work
+- [ ] After admin follow-up reply, status shows **Replied** with green (`success`) chip — not **New**
 
 ---
 
@@ -479,10 +494,238 @@ Contact submit body:
 | Submit 422 “take a moment” | Submitted within 3 seconds of challenge issue | Wait before submitting |
 | Submit 429 | Rate limit hit | Wait or test with a different email |
 | No auto-ack email | SMTP misconfigured | Check `SMTP_*`, Mailpit, `logs/app-*.log` for `smtp.send_failed` |
+| Submission status stuck on **New** after reply | Status chip only checks `ignored` | Also check `follow_up_sent_at`; use `color="success"` for **Replied** |
 | CORS error from Vite | Origin not in `CORS_ORIGINS` | Add `http://localhost:5173` |
 | DB error on boot | Migration failed | Check `schema_migrations` table; verify SQL ran |
 | GA on localhost | Expected — GA disabled outside production | Test with production build + `VITE_GA_MEASUREMENT_ID` |
 | `backend/.env` still used | AppConfig fallback | Move all vars to root `.env` |
+
+---
+
+## Email-verified registration
+
+Apply this section to forks that still use **single-step registration** (submitting the sign-up form creates a `users` row immediately, with no email verification).
+
+**Scope:** full-stack — backend API, database migration, frontend registration wizard, repo-root `.env`.
+
+Requires SMTP and `CHALLENGE_SECRET` to be configured (see [Contact Us](#contact-us-legal-pages-cookie-consent-and-ga4) or `.env.example`). If your fork lacks the contact-form challenge infrastructure, apply the Contact Us section first (or at minimum copy `ChallengeService`, `GET /api/v1/challenge`, and set `CHALLENGE_SECRET`). Admin-created users via `POST /api/v1/admin/users` **skip** verification — unchanged.
+
+---
+
+### What this update adds
+
+| Area | Capability |
+|------|------------|
+| Pending registrations | `pending_registrations` table holds sign-up data until email is verified |
+| Verification email | 6-digit code, hashed, 15-minute expiry |
+| Two-step sign-up | `POST /register` → email code → `POST /register/verify` |
+| Human check | Honeypot + math challenge on step 1 (same as Contact Us — 3s minimum submit time) |
+| Resend | `POST /register/resend` — 60s cooldown, max 3 resends per pending row |
+| Auto-login | Successful verify returns JWT; client goes to `/dashboard` |
+| Admin notify | Email to `ADMIN_NOTIFY_EMAIL` after account is created |
+| Rate limits | Reuses contact-form limits on register/resend (by email + IP) |
+| Security | 5 wrong codes invalidates pending row; SMTP failure rolls back pending insert |
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant RegisterPage
+    participant API
+    participant PendingRepo
+    participant MailService
+    participant UserRepo
+
+    User->>RegisterPage: Step 1 credentials + security check
+    RegisterPage->>API: GET /challenge
+    RegisterPage->>API: POST /register
+    API->>API: honeypot + challenge verify
+    API->>PendingRepo: uniqueness vs users + pending
+    API->>PendingRepo: insert pending row
+    API->>MailService: send verification code
+    alt SMTP fails
+        API->>PendingRepo: delete row
+        API-->>RegisterPage: 503
+    end
+    API-->>RegisterPage: pending_token
+
+    User->>RegisterPage: Step 2 enter code
+    RegisterPage->>API: POST /register/verify
+    API->>PendingRepo: verify code
+    API->>UserRepo: create user
+    API->>PendingRepo: delete pending
+    API->>MailService: notify admin
+    API-->>RegisterPage: token + user
+```
+
+---
+
+### Breaking / behavioural changes
+
+| Before | After |
+|--------|--------|
+| `POST /register` creates `users` row immediately | Pending row first; user created only after code verified |
+| Register returns user object | Register returns `{ pending_token, expires_at }` |
+| Client redirects to `/login` after register | Two-step wizard on `/register`; verify auto-logs in |
+| No registration emails | Verification code emailed to user |
+| No admin alert on sign-up | Admin email to `ADMIN_NOTIFY_EMAIL` after verification |
+| No human check on sign-up | Math challenge + honeypot on register step 1 (reuses `ChallengeService`) |
+| SMTP used for contact only | `MailService` also sends verification + admin notifications |
+| Register toggles global auth loading | Local `isSubmitting` on `RegisterPage` — avoids `GuestRoute` unmounting the wizard |
+
+---
+
+### Step 1 — Environment
+
+Add to repo-root `.env` (and `.env.example`):
+
+```
+ADMIN_NOTIFY_EMAIL=admin@example.com
+```
+
+Comma-separated for multiple recipients. If empty, admin notification is skipped (registration still works).
+
+Ensure `REGISTRATION_ENABLED=true`, `CHALLENGE_SECRET` is set (`openssl rand -hex 32`), and SMTP vars are configured (Mailpit locally: `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1025`, `SMTP_SECURE=none`).
+
+---
+
+### Step 2 — Database migration
+
+Copy and run on boot via file migrations:
+
+- `backend/migrations/003_create_pending_registrations.sql`
+
+Table: `pending_registrations` with unique `token`, `username`, and `email`; stores hashed password, hashed verification code, attempt/resend counters, and expiry timestamps.
+
+Expired rows are deleted opportunistically on register, verify, and resend.
+
+---
+
+### Step 3 — Copy new backend files
+
+| File | Purpose |
+|------|---------|
+| `backend/app/Models/PendingRegistration.php` | Pending row model |
+| `backend/app/Repositories/PendingRegistrationRepository.php` | Data access |
+| `backend/app/Services/RegistrationService.php` | Start, verify, resend orchestration |
+| `backend/app/Utils/VerificationCodeUtil.php` | Generate/hash/verify 6-digit codes |
+
+---
+
+### Step 4 — Patch existing backend files
+
+| File | Changes |
+|------|---------|
+| `backend/app/Config/AppConfig.php` | `getAdminNotifyEmails()` from `ADMIN_NOTIFY_EMAIL` |
+| `backend/app/Config/routes.php` | `POST /register/verify`, `POST /register/resend` |
+| `backend/app/Config/services.php` | Wire `PendingRegistrationRepository`, `RegistrationService` (+ `ChallengeService`); update `AuthController` DI |
+| `backend/app/Controllers/AuthController.php` | Delegate `register()` to `RegistrationService::startRegistration()`; pass challenge + honeypot fields; add verify/resend actions |
+| `backend/app/Services/RegistrationService.php` | Honeypot check + `ChallengeService::verify()` before rate limit on `startRegistration()` |
+| `backend/app/Http/Response.php` | `gone()` (410), `serviceUnavailable()` (503) |
+| `backend/app/Services/AuthService.php` | Remove `register()` — handled by `RegistrationService` |
+| `backend/app/Services/MailService.php` | `sendVerificationCode()`, `sendAdminNewUserNotification()` |
+
+---
+
+### Step 5 — Patch frontend files
+
+| File | Changes |
+|------|---------|
+| `frontend/src/api/errors.js` | **New** — `ApiError` with `statusCode` for 410 handling |
+| `frontend/src/api/client.js` | Throw `ApiError` from interceptor |
+| `frontend/src/api/auth.js` | `startRegistration()`, `verifyRegistration()`, `resendVerification()` |
+| `frontend/src/contexts/AuthContext.jsx` | Replace `register()` with `startRegistration()` + `completeRegistration()`; do **not** toggle global `isLoading` during registration (would unmount page via `GuestRoute`) |
+| `frontend/src/pages/RegisterPage.jsx` | Two-step wizard: credentials + security check → code entry with resend; use local `isSubmitting` for button state |
+| `frontend/src/api/contact.js` | Reuse `fetchChallenge()` on register step 1 (no new endpoint) |
+
+On `410` responses (expired or invalidated pending registration), reset wizard to step 1. Reload the math challenge after a failed step-1 submit.
+
+---
+
+### API reference
+
+| Method | Path | Auth | Response |
+|--------|------|------|----------|
+| `POST` | `/api/v1/register` | Public | 201 `{ pending_token, expires_at }` |
+| `POST` | `/api/v1/register/verify` | Public | 200 `{ token, user }` |
+| `POST` | `/api/v1/register/resend` | Public | 200 `{ expires_at }` |
+
+Register body:
+
+```json
+{
+  "username": "...",
+  "email": "...",
+  "password": "...",
+  "password_reminder": "...",
+  "challenge_token": "...",
+  "challenge_answer": "...",
+  "form_loaded_at": 1717776000,
+  "_website": ""
+}
+```
+
+`challenge_token`, `challenge_answer`, and `form_loaded_at` come from `GET /api/v1/challenge`. `_website` is the honeypot (must be empty).
+
+Verify body:
+
+```json
+{
+  "pending_token": "...",
+  "code": "123456"
+}
+```
+
+Resend body:
+
+```json
+{
+  "pending_token": "..."
+}
+```
+
+**Error codes:**
+
+| Status | When |
+|--------|------|
+| `409` | Username or email taken (active user or pending row) |
+| `422` | Validation errors, honeypot triggered, or security check failed (wrong answer, submit too fast) |
+| `400` | Wrong verification code (message includes remaining attempts) |
+| `410` | Pending registration expired or invalidated (5 wrong codes) — restart sign-up |
+| `429` | Rate limit or resend cooldown / max resends |
+| `503` | SMTP send failed on register (pending row rolled back) |
+
+---
+
+### Verification checklist
+
+- [ ] `composer test` passes in `backend/`
+- [ ] `REGISTRATION_ENABLED=true` and SMTP configured
+- [ ] `ADMIN_NOTIFY_EMAIL` set
+- [ ] `GET /api/v1/challenge` loads on `/register` step 1
+- [ ] Register step 1 rejects submit within 3 seconds (422)
+- [ ] Sign up on `/register` step 1 (after security check) → verification email in Mailpit
+- [ ] Step 1 advances to “Verify your email” (does not reset to blank sign-up form)
+- [ ] Enter code on step 2 → lands on `/dashboard` (auto-login)
+- [ ] Admin notification email received
+- [ ] Wrong code shows remaining attempts; 5 failures reset wizard
+- [ ] Resend respects 60s cooldown and max 3 resends
+- [ ] Admin-created users (`POST /admin/users`) work without verification
+
+---
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Register returns 503 | SMTP misconfigured | Check `SMTP_*`, Mailpit, `logs/app-*.log` for `smtp.send_failed` |
+| Verify returns 410 | Code expired or 5 wrong attempts | Start registration again |
+| Username taken but no account | Stale pending row | Wait for expiry or complete/abandon flow; expired rows auto-cleaned |
+| No admin email | `ADMIN_NOTIFY_EMAIL` empty or SMTP failed | Set env var; check logs for `registration.admin_notify` |
+| Client stuck on step 2 after 410 | Frontend not handling 410 | Reset wizard to step 1 on `ApiError` with `statusCode === 410` |
+| Sign-up form “refreshes” after submit | Global auth `isLoading` unmounts `RegisterPage` via `GuestRoute` | Use local `isSubmitting` in `RegisterPage`; keep `startRegistration()` off global `isLoading` |
+| Register 422 security check | Wrong math answer or submitted under 3 seconds | Wait, re-read challenge, resubmit; frontend reloads challenge on error |
+| Register 422 “Unable to process” | Honeypot filled | Leave hidden `_website` field empty |
+| Challenge always 422 on register | `CHALLENGE_SECRET` missing or token stale | Set stable `CHALLENGE_SECRET` in `.env`; reload page for fresh challenge |
 
 ---
 
@@ -497,7 +740,7 @@ Copy files from the upstream template commit that introduced this update:
 | Doc | Purpose |
 |-----|---------|
 | [guideline.md](guideline.md) | Feature spec and design rationale |
-| [guidelines_update.md](guidelines_update.md) | Migration hub: rolling logs + contact/legal/GA4 |
+| [guidelines_update.md](guidelines_update.md) | Migration hub: rolling logs + contact/legal/GA4 + email-verified registration |
 | [update.md](update.md) | Guest landing page routing (prerequisite for some forks) |
 | [DEPLOY.md](DEPLOY.md) | Production build, env vars, log paths |
 

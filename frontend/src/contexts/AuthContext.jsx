@@ -3,6 +3,18 @@ import { TOKEN_KEY, USER_KEY } from '../api/storage';
 
 const AuthContext = createContext(null);
 
+async function applyTimezoneIfMissing(user, updateSettingsApi, getBrowserTimezone) {
+  if (user.settings?.timezone) {
+    return user;
+  }
+  try {
+    const result = await updateSettingsApi('timezone', getBrowserTimezone());
+    return { ...user, settings: result.settings };
+  } catch {
+    return user;
+  }
+}
+
 export function AuthProvider({ children }) {
   const [state, setState] = useState(() => {
     const token = localStorage.getItem(TOKEN_KEY);
@@ -31,14 +43,7 @@ export function AuthProvider({ children }) {
           const { getMe, updateSettings: updateSettingsApi } = await import('../api/me');
           const { getBrowserTimezone } = await import('../utils/date');
           let data = await getMe();
-          if (!data.settings?.timezone) {
-            try {
-              const result = await updateSettingsApi('timezone', getBrowserTimezone());
-              data = { ...data, settings: result.settings };
-            } catch {
-              // keep going without persisted timezone
-            }
-          }
+          data = await applyTimezoneIfMissing(data, updateSettingsApi, getBrowserTimezone);
           localStorage.setItem(USER_KEY, JSON.stringify(data));
           setState({
             user: data,
@@ -63,15 +68,7 @@ export function AuthProvider({ children }) {
       const { getBrowserTimezone } = await import('../utils/date');
       const response = await loginApi(username, password);
       if (response.error) throw new Error(response.error.message);
-      let user = response.data.user;
-      if (!user.settings?.timezone) {
-        try {
-          const result = await updateSettingsApi('timezone', getBrowserTimezone());
-          user = { ...user, settings: result.settings };
-        } catch {
-          // continue without persisted timezone
-        }
-      }
+      let user = await applyTimezoneIfMissing(response.data.user, updateSettingsApi, getBrowserTimezone);
       localStorage.setItem(TOKEN_KEY, response.data.token);
       localStorage.setItem(USER_KEY, JSON.stringify(user));
       setState({
@@ -86,23 +83,28 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const register = useCallback(async (username, email, password, passwordReminder) => {
-    setState(prev => ({ ...prev, isLoading: true }));
-    try {
-      const { register: registerApi } = await import('../api/auth');
-      const response = await registerApi(username, email, password, passwordReminder);
-      if (response.error) throw new Error(response.error.message);
-      localStorage.setItem(USER_KEY, JSON.stringify(response.data));
-      setState({
-        user: response.data,
-        token: null,
-        isLoading: false,
-        isAuthenticated: false,
-      });
-    } catch (err) {
-      setState(prev => ({ ...prev, isLoading: false }));
-      throw err;
-    }
+  const startRegistration = useCallback(async (payload) => {
+    const { startRegistration: startRegistrationApi } = await import('../api/auth');
+    const response = await startRegistrationApi(payload);
+    if (response.error) throw new Error(response.error.message);
+    return response.data;
+  }, []);
+
+  const completeRegistration = useCallback(async (pendingToken, code) => {
+    const { verifyRegistration } = await import('../api/auth');
+    const { updateSettings: updateSettingsApi } = await import('../api/me');
+    const { getBrowserTimezone } = await import('../utils/date');
+    const response = await verifyRegistration(pendingToken, code);
+    if (response.error) throw new Error(response.error.message);
+    let user = await applyTimezoneIfMissing(response.data.user, updateSettingsApi, getBrowserTimezone);
+    localStorage.setItem(TOKEN_KEY, response.data.token);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    setState({
+      user,
+      token: response.data.token,
+      isLoading: false,
+      isAuthenticated: true,
+    });
   }, []);
 
   const updateSettings = useCallback(async (key, value) => {
@@ -131,7 +133,16 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, updateSettings, logout }}>
+    <AuthContext.Provider
+      value={{
+        ...state,
+        login,
+        startRegistration,
+        completeRegistration,
+        updateSettings,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

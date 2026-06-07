@@ -34,6 +34,8 @@ class AppConfig
     private static ?bool $smtpAuth;
     /** @var string[] */
     private static array $corsOrigins;
+    /** @var string[] */
+    private static array $adminNotifyEmails;
 
     public static function load(): void
     {
@@ -86,6 +88,11 @@ class AppConfig
             static fn (string $origin): string => trim($origin),
             explode(',', $corsRaw)
         ), static fn (string $origin): bool => $origin !== ''));
+        $adminNotifyRaw = $_ENV['ADMIN_NOTIFY_EMAIL'] ?? '';
+        self::$adminNotifyEmails = array_values(array_filter(array_map(
+            static fn (string $addr): string => trim($addr),
+            explode(',', $adminNotifyRaw)
+        ), static fn (string $addr): bool => $addr !== ''));
 
         self::$loaded = true;
     }
@@ -223,6 +230,14 @@ class AppConfig
     public static function getCorsOrigins(): array
     {
         return self::$corsOrigins;
+    }
+
+    /**
+     * @return string[]
+     */
+    public static function getAdminNotifyEmails(): array
+    {
+        return self::$adminNotifyEmails;
     }
 
     public static function resolveLogLevel(): int

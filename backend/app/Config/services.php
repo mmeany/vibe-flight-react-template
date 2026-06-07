@@ -7,6 +7,7 @@ use App\Controllers\AuthController;
 use App\Controllers\ChallengeController;
 use App\Controllers\ContactController;
 use App\Database\Database;
+use App\Repositories\PendingRegistrationRepository;
 use App\Repositories\RateLimitRepository;
 use App\Repositories\SubmissionRepository;
 use App\Repositories\UserRepository;
@@ -15,6 +16,7 @@ use App\Services\ChallengeService;
 use App\Services\ContactService;
 use App\Services\MailService;
 use App\Services\RateLimitService;
+use App\Services\RegistrationService;
 use App\Services\UserAdminService;
 use DI\ContainerBuilder;
 use Monolog\Handler\RotatingFileHandler;
@@ -68,7 +70,19 @@ $containerBuilder->addDefinitions([
     Database::class => $db,
     UserRepository::class => \DI\autowire()->constructor(\DI\get(Database::class)),
     AuthService::class => \DI\autowire()->constructor(\DI\get(UserRepository::class), \DI\get(LoggerInterface::class)),
-    AuthController::class => \DI\autowire()->constructor(\DI\get(AuthService::class)),
+    PendingRegistrationRepository::class => \DI\autowire()->constructor(\DI\get(Database::class)),
+    RegistrationService::class => \DI\autowire()->constructor(
+        \DI\get(PendingRegistrationRepository::class),
+        \DI\get(UserRepository::class),
+        \DI\get(MailService::class),
+        \DI\get(RateLimitService::class),
+        \DI\get(ChallengeService::class),
+        \DI\get(LoggerInterface::class),
+    ),
+    AuthController::class => \DI\autowire()->constructor(
+        \DI\get(AuthService::class),
+        \DI\get(RegistrationService::class),
+    ),
     UserAdminService::class => \DI\autowire()->constructor(\DI\get(UserRepository::class), \DI\get(LoggerInterface::class)),
     AdminUserController::class => \DI\autowire()->constructor(\DI\get(UserAdminService::class)),
     SubmissionRepository::class => \DI\autowire()->constructor(\DI\get(Database::class)),
