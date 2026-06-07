@@ -58,8 +58,9 @@ chmod 600 .env
 | `JWT_EXPIRATION_DAYS` | e.g. `30` |
 | `REGISTRATION_ENABLED` | `false` (recommended) — disables public sign-up; admins can still create users (see below) |
 | `ADMIN_USERNAMES` | Comma-separated login usernames allowed to use **Users** admin UI, e.g. `mark` or `mark,jane` (exact match, case-sensitive) |
-| `LOG_DIR` | `logs` (writes to `logs/app.log` under deploy root) |
+| `LOG_DIR` | `logs` (daily rotated files under deploy root, e.g. `logs/app-YYYY-MM-DD.log`) |
 | `LOG_LEVEL` | `ERROR` or `WARNING` |
+| `LOG_MAX_FILES` | `14` — number of daily log files to retain (oldest deleted automatically) |
 | `CHALLENGE_SECRET` | Long random string for contact-form security tokens, e.g. `openssl rand -hex 32` |
 | `SMTP_HOST` | SMTP server hostname |
 | `SMTP_PORT` | SMTP port (e.g. `587` for TLS, `1025` for Mailpit locally) |
@@ -109,7 +110,7 @@ Replace `<domain>` with your host.
 2. **API** — `https://<domain>/app/api/v1/...` returns JSON, not an HTML 404 page.
 3. **Security** — `https://<domain>/app/.env` returns 403 Forbidden.
 4. **Security** — `https://<domain>/app/app/` returns 403 Forbidden.
-5. **Logs** — after a request, `logs/app.log` exists and is writable.
+5. **Logs** — after a request, today's log file exists (e.g. `logs/app-2026-06-07.log`) and is writable. A legacy undated `logs/app.log` from before rotation may still be present.
 6. **Auth** — login works with a user in the database.
 7. **Admin** — with `ADMIN_USERNAMES` set, admin login shows **Users** and **Submissions**; creating a user via that page succeeds while public registration is disabled.
 8. **Contact** — landing page Contact Us form submits successfully; acknowledgement email arrives (check SMTP).
@@ -128,9 +129,9 @@ Replace `<domain>` with your host.
 | Tracy bar in production | `APP_ENV` not `production` | Set `APP_ENV=production` in `.env` |
 | No **Users** menu after login | Username not in `ADMIN_USERNAMES`, or stale session | Add exact username to `.env`; log out and log in again |
 | 403 on `/api/v1/admin/users` | Same as above | Fix `ADMIN_USERNAMES`; ensure `Authorization: Bearer` token is sent |
-| 500 on login after deploy | PHP error in `AuthService` or migration | Check PHP/server error output and `logs/app.log` |
+| 500 on login after deploy | PHP error in `AuthService` or migration | Check PHP/server error output and `logs/app-*.log` |
 
-Check `logs/app.log` for migration and runtime errors.
+Check `logs/app-*.log` (or today's `logs/app-YYYY-MM-DD.log`) for migration and runtime errors.
 
 ## Admin users and provisioning accounts
 

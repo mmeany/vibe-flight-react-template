@@ -20,6 +20,7 @@ class AppConfig
     /** @var string[] */
     private static array $adminUsernames;
     private static string $logDir;
+    private static int $logMaxFiles;
     private static string $logLevel;
     private static string $appEnv;
     private static string $challengeSecret;
@@ -65,6 +66,7 @@ class AppConfig
             explode(',', $adminRaw)
         ), static fn (string $name): bool => $name !== ''));
         self::$logDir = $_ENV['LOG_DIR'] ?? 'logs';
+        self::$logMaxFiles = max(1, (int) ($_ENV['LOG_MAX_FILES'] ?? '14'));
         self::$logLevel = strtoupper($_ENV['LOG_LEVEL'] ?? 'DEBUG');
         self::$appEnv = strtolower($_ENV['APP_ENV'] ?? 'development');
         self::$challengeSecret = $_ENV['CHALLENGE_SECRET'] ?? '';
@@ -144,6 +146,11 @@ class AppConfig
     public static function getLogDir(): string
     {
         return self::$logDir;
+    }
+
+    public static function getLogMaxFiles(): int
+    {
+        return self::$logMaxFiles;
     }
 
     public static function getLogLevel(): string

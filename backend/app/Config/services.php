@@ -17,7 +17,7 @@ use App\Services\MailService;
 use App\Services\RateLimitService;
 use App\Services\UserAdminService;
 use DI\ContainerBuilder;
-use Monolog\Handler\StreamHandler;
+use Monolog\Handler\RotatingFileHandler;
 use Monolog\Logger;
 use Psr\Log\LoggerInterface;
 use Tracy\Debugger;
@@ -26,7 +26,7 @@ use flight\debug\tracy\TracyExtensionLoader;
 /** @var array $config */
 /** @var \flight\Engine $app */
 
-$logDir = __DIR__ . $ds . '..' . $ds . AppConfig::getLogDir();
+$logDir = dirname(__DIR__, 2) . $ds . AppConfig::getLogDir();
 
 if (!AppConfig::isProduction()) {
     Debugger::enable();
@@ -44,7 +44,11 @@ if (!is_dir($logDir)) {
 }
 
 $logger = new Logger('app');
-$logger->pushHandler(new StreamHandler("$logDir/app.log", AppConfig::resolveLogLevel()));
+$logger->pushHandler(new RotatingFileHandler(
+    "$logDir/app.log",
+    AppConfig::getLogMaxFiles(),
+    AppConfig::resolveLogLevel()
+));
 
 try {
     $db = new Database();
