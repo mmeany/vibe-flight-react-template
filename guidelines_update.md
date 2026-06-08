@@ -11,6 +11,7 @@ Use this file (and linked guides) to bring an **existing fork** of `vibe-flight-
 | **Contact Us + legal + GA4** ([below](#contact-us-legal-pages-cookie-consent-and-ga4)) | Full-stack | Missing contact form, SMTP, rate limits, `/terms`, cookie banner, admin submissions |
 | **Authenticated Contact Us + security footer** ([below](#authenticated-contact-us-and-dashboard-security-footer)) | Full-stack (~20 min) | Logged-in users have no `/contact` page; dashboard footer is version-only; no authenticated contact API |
 | **Admin submissions list UX** ([below](#admin-submissions-search-sort-and-pagination)) | Full-stack (~30 min) | `/admin/submissions` lists all rows on one page; no search, column sort, status filter, or pagination controls |
+| **Admin submissions CSV export** ([below](#admin-submissions-csv-export)) | Full-stack (~15 min) | `/admin/submissions` has no CSV download button |
 | **Admin users list UX** ([below](#admin-users-search-sort-and-pagination)) | Full-stack (~30 min) | `/admin/users` Manage tab loads every user in one request; no search, column sort, or pagination controls |
 | **Email-verified registration** ([below](#email-verified-registration)) | Full-stack | Registration is single-step (`POST /register` creates user immediately); no email verification, human check, or admin notify on sign-up |
 | **Scrollbar-stable layout (MUI overlays)** ([below](#scrollbar-stable-layout-mui-overlays)) | Frontend only (~5 min) | Page layout shifts horizontally when opening menus, dialogs, or drawers; or fork lacks `scrollbar-gutter` + MUI scroll-lock pairing |
@@ -860,6 +861,169 @@ Status chips (New / Replied / Ignored) are unchanged — see [Step 7 — AdminSu
 
 ---
 
+## Admin submissions CSV export
+
+Apply this section to forks that already have the paginated admin submissions UI (`/admin/submissions`) but no way to download submissions as CSV.
+
+**Scope:** full-stack — `SubmissionRepository`, `ContactService`, `AdminSubmissionController`, `Response`, `SubmissionLabels`, `adminSubmissions.js`, `AdminSubmissionsPage.jsx`, and new backend tests. No database migration or new npm/composer packages.
+
+Requires the [Admin submissions list UX](#admin-submissions-search-sort-and-pagination) guide (or equivalent paginated list with search, status filter, and sort). Export reuses the same filter query params as `GET /api/v1/admin/submissions` but returns **all matching rows** (not just the current page).
+
+---
+
+### What changes
+
+| Before | After |
+|--------|--------|
+| No export | **Download CSV** button in the filter toolbar |
+| — | Server builds CSV with `fputcsv()` and UTF-8 BOM for Excel |
+| — | Export respects active search, status, show-ignored, and sort/order |
+| — | Hard cap of **10,000** rows — over-limit returns `422` |
+
+```mermaid
+flowchart LR
+  subgraph ui [AdminSubmissionsPage]
+    filters[Search + Status + ShowIgnored + Sort]
+    btn[Download CSV]
+  end
+  subgraph api [GET /admin/submissions/export]
+    q[Same filter params minus pagination]
+    csv[text/csv attachment]
+  end
+  filters --> btn
+  btn --> q
+  q --> csv
+```
+
+**Out of scope (v1):** per-row selection export, category filter, URL query sync, help-topic update.
+
+---
+
+### API — export endpoint
+
+`GET /api/v1/admin/submissions/export` (Admin JWT). Register this route **before** `GET /admin/submissions` in `routes.php`.
+
+| Param | Values | Default | Notes |
+|-------|--------|---------|-------|
+| `search` | string | — | Same as list — min 2 characters server-side |
+| `sort` | `created_at`, `email`, `status` | `created_at` | Same allowlist as list |
+| `order` | `asc`, `desc` | `desc` | |
+| `status` | `all`, `new`, `replied` | `all` | |
+| `include_ignored` | bool | `false` | |
+
+No `page` or `per_page`. Response is raw CSV (not JSON):
+
+- `Content-Type: text/csv; charset=utf-8`
+- `Content-Disposition: attachment; filename="submissions-YYYY-MM-DD.csv"` (UTC date via `gmdate`)
+
+**CSV columns (header row):**
+
+`id`, `email`, `known_as`, `firstname`, `surname`, `category`, `question`, `status`, `ignored`, `created_at`, `auto_response_sent_at`, `follow_up_sent_at`, `follow_up_response`
+
+- **category** — human labels (e.g. `General enquiry`) via `SubmissionLabels::categoryLabel()`
+- **status** — `New`, `Replied`, or `Ignored` (same priority as UI chips)
+- **ignored** — `0` or `1`
+
+If `countSubmissions()` for the filtered query exceeds **10,000**, return `422` with message: `Too many rows to export; narrow your filters.`
+
+---
+
+### Step 1 — Patch backend files
+
+#### `app/Http/Response.php`
+
+Add `Response::csv(string $filename, string $content)` — sets CSV headers and echoes body (no JSON envelope).
+
+#### `app/Support/SubmissionLabels.php` (new)
+
+Shared `categoryLabel()` and `statusLabel()` helpers. Update `MailService` to use `SubmissionLabels::categoryLabel()` instead of a private duplicate.
+
+#### `app/Repositories/SubmissionRepository.php`
+
+Add `listSubmissionsForExport(SubmissionListQuery $query, int $maxRows)` — same SELECT/WHERE/ORDER as `listSubmissions()`, `LIMIT :limit` only (no `OFFSET`).
+
+#### `app/Services/ContactService.php`
+
+Add `exportSubmissionsCsv(SubmissionListQuery $query): string`:
+
+1. `countSubmissions()` — throw `InvalidArgumentException` if total > `EXPORT_MAX_ROWS` (10,000)
+2. `listSubmissionsForExport()` with the cap
+3. Build CSV via `fopen('php://temp')` + `fputcsv()`
+4. Prefix UTF-8 BOM (`\xEF\xBB\xBF`)
+
+#### `app/Controllers/AdminSubmissionController.php`
+
+Add `export()` — parse filters via `SubmissionListQuery::fromRequestParams($_GET)`, call service, catch `InvalidArgumentException` → `Response::unprocessableEntity()`, else `Response::csv()`.
+
+#### `app/Config/routes.php`
+
+```php
+$router->get('/admin/submissions/export', function () use ($container) {
+    $container->get(AdminSubmissionController::class)->export();
+});
+```
+
+Place **above** the existing `GET /admin/submissions` route.
+
+---
+
+### Step 2 — Copy new backend tests
+
+| File | Role |
+|------|------|
+| `tests/SubmissionRepositoryTest.php` | Assert export SQL uses same WHERE as list, has `LIMIT` but no `OFFSET` |
+| `tests/ContactServiceExportTest.php` | Assert over-limit throws; happy path includes header row and UTF-8 BOM |
+
+Run `composer test` in `backend/`.
+
+---
+
+### Step 3 — Patch frontend files
+
+#### `src/api/adminSubmissions.js`
+
+Add `exportSubmissionsCsv({ includeIgnored, search, sort, order, status })`:
+
+- `GET /admin/submissions/export` with `responseType: 'blob'`
+- Parse `Content-Disposition` for filename; fallback `submissions-YYYY-MM-DD.csv`
+- On error, read JSON from blob body and throw `ApiError`
+- Trigger download via temporary `<a>` + `URL.createObjectURL`
+
+#### `src/pages/AdminSubmissionsPage.jsx`
+
+| UI element | Behaviour |
+|------------|-----------|
+| **Download CSV** button | `Download` icon, `variant="outlined"`, `size="small"`, right-aligned on `sm+` (`ml: { sm: 'auto' }`) |
+| On click | Pass current `includeIgnored`, `debouncedSearch`, `sort`, `order`, `statusFilter` |
+| Loading | `exporting` state — disable button, label "Exporting…" |
+| Error | Show message in existing `actionError` Alert |
+
+---
+
+### Verification checklist
+
+- [ ] `composer test` passes in `backend/`
+- [ ] Default filters: CSV contains all non-ignored submissions, sorted `created_at desc`
+- [ ] Search / status / show-ignored / sort match the on-screen filtered total (`meta.total`)
+- [ ] CSV opens correctly in Excel (UTF-8 BOM; message fields with commas/newlines are quoted)
+- [ ] Over 10,000 matching rows returns `422` with a clear message
+- [ ] Non-admin gets 401/403
+- [ ] Button shows loading state; errors appear in UI
+
+---
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Export returns JSON error in downloaded file | `responseType` not set to `blob` | Use `responseType: 'blob'` on the axios request |
+| Excel shows garbled characters | Missing UTF-8 BOM | Prefix `\xEF\xBB\xBF` before CSV body |
+| Export row count ≠ filtered total | Export ignores filters | Pass same query params as `listSubmissions` (minus pagination) |
+| `422` on large exports | Over 10,000 rows | Narrow search or status filter |
+| Route not found | Export registered after conflicting route | Register `/admin/submissions/export` before `/admin/submissions` |
+
+---
+
 ## Admin users search, sort, and pagination
 
 Apply this section to forks that already have the admin user management UI (`/admin/users` — Create, Import CSV, Manage tabs) but the **Manage** tab loads every user in a single `GET /admin/users` response with no search, sort controls, or pagination bar.
@@ -1391,7 +1555,7 @@ Copy files from the upstream template commit that introduced this update:
 | Doc | Purpose |
 |-----|---------|
 | [guideline.md](guideline.md) | Feature spec and design rationale |
-| [guidelines_update.md](guidelines_update.md) | Migration hub: rolling logs + contact/legal/GA4 + authenticated contact/security footer + admin submissions list UX + admin users list UX + scrollbar-stable MUI overlays + email-verified registration |
+| [guidelines_update.md](guidelines_update.md) | Migration hub: rolling logs + contact/legal/GA4 + authenticated contact/security footer + admin submissions list UX + admin submissions CSV export + admin users list UX + scrollbar-stable MUI overlays + email-verified registration |
 | [update.md](update.md) | Guest landing page routing (prerequisite for some forks) |
 | [DEPLOY.md](DEPLOY.md) | Production build, env vars, log paths |
 

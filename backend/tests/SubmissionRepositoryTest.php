@@ -184,6 +184,52 @@ class SubmissionRepositoryTest extends TestCase
         $this->assertSame('%help%', $boundParams[':search']);
     }
 
+    public function testListSubmissionsForExportUsesSameWhereClauseWithoutOffset(): void
+    {
+        $capturedSql = null;
+        $boundParams = [];
+
+        $stmt = $this->createMock(PDOStatement::class);
+        $stmt->method('bindValue')->willReturnCallback(function ($key, $value) use (&$boundParams): bool {
+            $boundParams[$key] = $value;
+
+            return true;
+        });
+        $stmt->method('execute');
+        $stmt->method('fetchAll')->willReturn([]);
+
+        $pdo = $this->createMock(PDO::class);
+        $pdo->method('prepare')->willReturnCallback(function (string $sql) use ($stmt, &$capturedSql): PDOStatement {
+            $capturedSql = $sql;
+
+            return $stmt;
+        });
+
+        $database = $this->createMock(Database::class);
+        $database->method('getPdo')->willReturn($pdo);
+
+        $repo = new SubmissionRepository($database);
+        $query = new SubmissionListQuery(
+            includeIgnored: false,
+            page: 3,
+            perPage: 25,
+            search: 'alice',
+            sort: 'created_at',
+            order: 'desc',
+            status: 'all',
+        );
+
+        $repo->listSubmissionsForExport($query, 10_000);
+
+        $this->assertNotNull($capturedSql);
+        $this->assertStringContainsString('WHERE ignored = 0', $capturedSql);
+        $this->assertStringContainsString('email LIKE :search', $capturedSql);
+        $this->assertStringContainsString('LIMIT :limit', $capturedSql);
+        $this->assertStringNotContainsString('OFFSET', $capturedSql);
+        $this->assertSame('%alice%', $boundParams[':search']);
+        $this->assertSame(10_000, $boundParams[':limit']);
+    }
+
     public function testSubmissionListQueryIgnoresShortSearchTerms(): void
     {
         $query = SubmissionListQuery::fromRequestParams([

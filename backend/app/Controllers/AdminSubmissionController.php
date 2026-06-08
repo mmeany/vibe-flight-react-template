@@ -27,6 +27,20 @@ class AdminSubmissionController
         ]);
     }
 
+    public function export(): void
+    {
+        $query = SubmissionListQuery::fromRequestParams($_GET);
+        try {
+            $csv = $this->contactService->exportSubmissionsCsv($query);
+        } catch (\InvalidArgumentException $e) {
+            Response::unprocessableEntity($e->getMessage());
+
+            return;
+        }
+        $filename = 'submissions-' . gmdate('Y-m-d') . '.csv';
+        Response::csv($filename, $csv);
+    }
+
     public function ignore(string $id): void
     {
         $body = json_decode(file_get_contents('php://input'), true) ?? [];

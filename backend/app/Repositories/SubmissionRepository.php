@@ -70,6 +70,37 @@ class SubmissionRepository
         }, $rows);
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function listSubmissionsForExport(SubmissionListQuery $query, int $maxRows): array
+    {
+        $where = $this->buildWhereClause($query);
+        $sql = 'SELECT id, email, payload, ignored, follow_up_response, created_at,
+                       auto_response_sent_at, follow_up_sent_at
+                FROM submissions'
+            . $where['sql']
+            . $this->buildOrderClause($query)
+            . ' LIMIT :limit';
+
+        $stmt = $this->db->getPdo()->prepare($sql);
+        foreach ($where['params'] as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->bindValue(':limit', $maxRows, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        return array_map(function (array $row): array {
+            $row['id'] = (int) $row['id'];
+            $row['ignored'] = (bool) $row['ignored'];
+            $row['payload'] = json_decode((string) $row['payload'], true, 512, JSON_THROW_ON_ERROR);
+
+            return $row;
+        }, $rows);
+    }
+
     public function countSubmissions(SubmissionListQuery $query): int
     {
         $where = $this->buildWhereClause($query);

@@ -11,6 +11,7 @@ use App\Http\Response;
 use App\Repositories\SubmissionRepository;
 use App\Repositories\UserRepository;
 use App\Support\ClientIp;
+use App\Support\SubmissionLabels;
 use Psr\Log\LoggerInterface;
 
 class ContactService
@@ -19,6 +20,8 @@ class ContactService
     private const VALID_CATEGORIES = ['general_enquiry', 'feature_request', 'partnership', 'bug_report'];
 
     private const QUESTION_MAX_LENGTH = 250;
+
+    private const EXPORT_MAX_ROWS = 10_000;
 
     public function __construct(
         private readonly SubmissionRepository $submissionRepository,
@@ -162,6 +165,72 @@ class ContactService
             'sort' => $query->sort,
             'order' => $query->order,
         ];
+    }
+
+    public function exportSubmissionsCsv(SubmissionListQuery $query): string
+    {
+        $total = $this->submissionRepository->countSubmissions($query);
+        if ($total > self::EXPORT_MAX_ROWS) {
+            throw new \InvalidArgumentException('Too many rows to export; narrow your filters.');
+        }
+
+        $items = $this->submissionRepository->listSubmissionsForExport($query, self::EXPORT_MAX_ROWS);
+
+        $handle = fopen('php://temp', 'r+');
+        if ($handle === false) {
+            Response::serverError('Failed to generate export.');
+            exit;
+        }
+
+        $headers = [
+            'id',
+            'email',
+            'known_as',
+            'firstname',
+            'surname',
+            'category',
+            'question',
+            'status',
+            'ignored',
+            'created_at',
+            'auto_response_sent_at',
+            'follow_up_sent_at',
+            'follow_up_response',
+        ];
+        fputcsv($handle, $headers);
+
+        foreach ($items as $submission) {
+            $payload = is_array($submission['payload']) ? $submission['payload'] : [];
+            $category = (string) ($payload['category'] ?? '');
+            $followUpSentAt = $submission['follow_up_sent_at'] ?? null;
+
+            fputcsv($handle, [
+                $submission['id'],
+                $submission['email'],
+                $payload['known_as'] ?? '',
+                $payload['firstname'] ?? '',
+                $payload['surname'] ?? '',
+                SubmissionLabels::categoryLabel($category),
+                $payload['question'] ?? '',
+                SubmissionLabels::statusLabel((bool) $submission['ignored'], is_string($followUpSentAt) ? $followUpSentAt : null),
+                $submission['ignored'] ? '1' : '0',
+                $submission['created_at'] ?? '',
+                $submission['auto_response_sent_at'] ?? '',
+                $followUpSentAt ?? '',
+                $submission['follow_up_response'] ?? '',
+            ]);
+        }
+
+        rewind($handle);
+        $csv = stream_get_contents($handle);
+        fclose($handle);
+
+        if ($csv === false) {
+            Response::serverError('Failed to generate export.');
+            exit;
+        }
+
+        return "\xEF\xBB\xBF" . $csv;
     }
 
     public function setIgnored(int $id, bool $ignored): array

@@ -1,6 +1,7 @@
 import {
   Block as BlockIcon,
   Clear as ClearIcon,
+  Download as DownloadIcon,
   Email as EmailIcon,
 } from '@mui/icons-material';
 import {
@@ -36,6 +37,7 @@ import {
 } from '@mui/material';
 import { useCallback, useEffect, useState } from 'react';
 import {
+  exportSubmissionsCsv,
   listSubmissions,
   replyToSubmission,
   setSubmissionIgnored,
@@ -86,6 +88,7 @@ export default function AdminSubmissionsPage() {
   const [replyMessage, setReplyMessage] = useState('');
   const [actionError, setActionError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -150,6 +153,24 @@ export default function AdminSubmissionsPage() {
       await maybeRefetchAfterAction();
     } catch (err) {
       setActionError(err.message ?? 'Failed to update submission.');
+    }
+  };
+
+  const handleExportCsv = async () => {
+    setActionError('');
+    setExporting(true);
+    try {
+      await exportSubmissionsCsv({
+        includeIgnored,
+        search: debouncedSearch,
+        sort,
+        order,
+        status: statusFilter,
+      });
+    } catch (err) {
+      setActionError(err.message ?? 'Failed to export submissions.');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -241,6 +262,16 @@ export default function AdminSubmissionsPage() {
             }
             label="Show ignored"
           />
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<DownloadIcon />}
+            onClick={handleExportCsv}
+            disabled={exporting || loading}
+            sx={{ ml: { sm: 'auto' } }}
+          >
+            {exporting ? 'Exporting…' : 'Download CSV'}
+          </Button>
         </Stack>
 
         {error && <Alert severity="error">{error}</Alert>}

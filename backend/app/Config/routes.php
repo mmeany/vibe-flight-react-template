@@ -92,6 +92,10 @@ $router->group('/api/v1', function (\flight\net\Router $router) use ($container)
         $container->get(AdminUserController::class)->restore($id);
     });
 
+    $router->get('/admin/submissions/export', function () use ($container) {
+        $container->get(AdminSubmissionController::class)->export();
+    });
+
     $router->get('/admin/submissions', function () use ($container) {
         $container->get(AdminSubmissionController::class)->index();
     });

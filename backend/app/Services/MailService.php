@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Config\AppConfig;
+use App\Support\SubmissionLabels;
 use PHPMailer\PHPMailer\PHPMailer;
 use Psr\Log\LoggerInterface;
 
@@ -18,7 +19,7 @@ class MailService {
 
     public function sendAutoResponse(string $email, string $knownAs, string $category): bool {
         $greeting = $knownAs !== '' ? "Hi {$knownAs}," : 'Hi,';
-        $categoryLabel = $this->categoryLabel($category);
+        $categoryLabel = SubmissionLabels::categoryLabel($category);
         $subject = 'We received your message';
         $body = "{$greeting}\n\n"
             . "Thank you for contacting us regarding: {$categoryLabel}.\n\n"
@@ -120,13 +121,4 @@ class MailService {
         }
     }
 
-    private function categoryLabel(string $category): string {
-        return match ($category) {
-            'general_enquiry' => 'General enquiry',
-            'feature_request' => 'Feature request',
-            'partnership' => 'Partnership / collaboration',
-            'bug_report' => 'Bug Report',
-            default => $category,
-        };
-    }
 }

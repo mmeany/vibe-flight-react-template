@@ -81,6 +81,14 @@ class Response
         self::error($message, 'SERVER_ERROR', 500);
     }
 
+    public static function csv(string $filename, string $content): void
+    {
+        http_response_code(200);
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        echo $content;
+    }
+
     private static function json(array $payload, int $statusCode): void
     {
         http_response_code($statusCode);
