@@ -15,8 +15,26 @@ export const CONTACT_FORM = {
   },
 };
 
+export const AUTHENTICATED_CONTACT_FORM = {
+  heading: 'Contact Us',
+  subheading: 'Send a message to the team. Your account details will be attached automatically.',
+  submitLabel: 'Send message',
+  successMessage: 'Thank you — your message has been received.',
+  fields: {
+    category: { label: 'What is this about?', required: true },
+    question: { label: 'Your message', required: false, maxLength: 250 },
+  },
+};
+
 export const CONTACT_CATEGORIES = [
   { value: 'general_enquiry', label: 'General enquiry' },
+  { value: 'feature_request', label: 'Feature request' },
+  { value: 'partnership', label: 'Partnership / collaboration' },
+];
+
+export const AUTHENTICATED_CONTACT_CATEGORIES = [
+  { value: 'general_enquiry', label: 'General enquiry' },
+  { value: 'bug_report', label: 'Bug Report' },
   { value: 'feature_request', label: 'Feature request' },
   { value: 'partnership', label: 'Partnership / collaboration' },
 ];

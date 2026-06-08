@@ -57,6 +57,10 @@ $router->group('/api/v1', function (\flight\net\Router $router) use ($container)
     $router->post('/password', function () use ($container) {
         $container->get(AuthController::class)->changePassword();
     });
+
+    $router->post('/contact/authenticated', function () use ($container) {
+        $container->get(ContactController::class)->submitAuthenticated();
+    });
 }, [JwtMiddleware::class]);
 
 $router->group('/api/v1', function (\flight\net\Router $router) use ($container) {

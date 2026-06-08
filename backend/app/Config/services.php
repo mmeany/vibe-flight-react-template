@@ -99,6 +99,7 @@ $containerBuilder->addDefinitions([
         \DI\get(ChallengeService::class),
         \DI\get(RateLimitService::class),
         \DI\get(MailService::class),
+        \DI\get(UserRepository::class),
         \DI\get(LoggerInterface::class),
     ),
     ChallengeController::class => \DI\autowire()->constructor(\DI\get(ChallengeService::class)),

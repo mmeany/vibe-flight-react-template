@@ -125,6 +125,7 @@ class MailService {
             'general_enquiry' => 'General enquiry',
             'feature_request' => 'Feature request',
             'partnership' => 'Partnership / collaboration',
+            'bug_report' => 'Bug Report',
             default => $category,
         };
     }

@@ -4,17 +4,19 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\DTOs\AuthenticatedSubmissionCreateDto;
 use App\DTOs\SubmissionCreateDto;
 use App\DTOs\SubmissionListQuery;
 use App\Http\Response;
 use App\Repositories\SubmissionRepository;
+use App\Repositories\UserRepository;
 use App\Support\ClientIp;
 use Psr\Log\LoggerInterface;
 
 class ContactService
 {
     /** @var string[] */
-    private const VALID_CATEGORIES = ['general_enquiry', 'feature_request', 'partnership'];
+    private const VALID_CATEGORIES = ['general_enquiry', 'feature_request', 'partnership', 'bug_report'];
 
     private const QUESTION_MAX_LENGTH = 250;
 
@@ -23,6 +25,7 @@ class ContactService
         private readonly ChallengeService $challengeService,
         private readonly RateLimitService $rateLimitService,
         private readonly MailService $mailService,
+        private readonly UserRepository $userRepository,
         private readonly LoggerInterface $logger,
     ) {}
 
@@ -70,6 +73,73 @@ class ContactService
             'event' => 'contact.smtp',
             'submission_id' => $submissionId,
             'sent' => $sent,
+        ]);
+
+        return [
+            'message' => 'Thank you — your message has been received.',
+            'submission_id' => $submissionId,
+        ];
+    }
+
+    /**
+     * @return array{message: string, submission_id: int}
+     */
+    public function submitAuthenticated(int $userId, AuthenticatedSubmissionCreateDto $dto): array
+    {
+        if ($dto->website !== '') {
+            $this->logger->info('honeypot_triggered', ['event' => 'honeypot_triggered']);
+            Response::unprocessableEntity('Unable to process your request.');
+            exit;
+        }
+
+        $errors = $this->validateAuthenticatedFields($dto);
+        if ($errors !== []) {
+            Response::unprocessableEntity(implode(' ', $errors));
+            exit;
+        }
+
+        $user = $this->userRepository->findById($userId);
+        if ($user === null) {
+            Response::notFound('User not found');
+            exit;
+        }
+
+        $settings = $user->getSettings() ?? [];
+        $alias = trim((string) ($settings['user_alias'] ?? ''));
+        if ($alias === '') {
+            $alias = $user->username;
+        }
+
+        $email = $user->email;
+        $payload = [
+            'firstname' => $alias,
+            'surname' => '—',
+            'known_as' => $alias,
+            'category' => $dto->category,
+            'question' => $dto->question,
+        ];
+
+        $ip = ClientIp::resolve();
+
+        try {
+            $this->rateLimitService->enforce($email, $ip);
+        } catch (\RuntimeException $e) {
+            Response::tooManyRequests($e->getMessage());
+            exit;
+        }
+
+        $submissionId = $this->submissionRepository->insert($email, $payload);
+
+        $sent = $this->mailService->sendAutoResponse($email, $alias, $dto->category);
+        if ($sent) {
+            $this->submissionRepository->markAutoResponseSent($submissionId);
+        }
+
+        $this->logger->info('contact.smtp', [
+            'event' => 'contact.smtp',
+            'submission_id' => $submissionId,
+            'sent' => $sent,
+            'authenticated' => true,
         ]);
 
         return [
@@ -160,6 +230,23 @@ class ContactService
         if ($dto->knownAs === '') {
             $errors[] = 'Known as is required.';
         }
+        if (!in_array($dto->category, self::VALID_CATEGORIES, true)) {
+            $errors[] = 'Please select a valid category.';
+        }
+        if (strlen($dto->question) > self::QUESTION_MAX_LENGTH) {
+            $errors[] = 'Question must be ' . self::QUESTION_MAX_LENGTH . ' characters or fewer.';
+        }
+
+        return $errors;
+    }
+
+    /**
+     * @return string[]
+     */
+    private function validateAuthenticatedFields(AuthenticatedSubmissionCreateDto $dto): array
+    {
+        $errors = [];
+
         if (!in_array($dto->category, self::VALID_CATEGORIES, true)) {
             $errors[] = 'Please select a valid category.';
         }

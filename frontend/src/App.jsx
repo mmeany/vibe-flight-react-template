@@ -6,6 +6,7 @@ import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './pages/SettingsPage';
 import HelpPage from './pages/HelpPage';
 import AboutPage from './pages/AboutPage';
+import ContactPage from './pages/ContactPage';
 import { DEFAULT_HELP_TOPIC_ID } from './help/helpTopics';
 import AdminUsersPage from './pages/AdminUsersPage';
 import AdminSubmissionsPage from './pages/AdminSubmissionsPage';
@@ -48,6 +49,7 @@ export default function App() {
         } />
         <Route path="/help/:topicId" element={<ProtectedRoute><HelpPage /></ProtectedRoute>} />
         <Route path="/about" element={<ProtectedRoute><AboutPage /></ProtectedRoute>} />
+        <Route path="/contact" element={<ProtectedRoute><ContactPage /></ProtectedRoute>} />
         <Route path="/admin/users" element={
           <ProtectedRoute>
             <AdminRoute><AdminUsersPage /></AdminRoute>

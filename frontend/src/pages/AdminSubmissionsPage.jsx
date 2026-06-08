@@ -53,6 +53,7 @@ function categoryLabel(payload) {
     general_enquiry: 'General enquiry',
     feature_request: 'Feature request',
     partnership: 'Partnership / collaboration',
+    bug_report: 'Bug Report',
   };
   return labels[category] ?? category;
 }

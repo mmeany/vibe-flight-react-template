@@ -5,6 +5,7 @@ import {
   Logout as LogoutIcon,
   Menu as MenuIcon,
   Inbox as InboxIcon,
+  Mail as MailIcon,
   People as PeopleIcon,
   Settings as SettingsIcon,
 } from '@mui/icons-material';
@@ -101,6 +102,10 @@ export default function Header() {
           <ListItemIcon><InfoIcon /></ListItemIcon>
           <ListItemText primary="About" />
         </ListItemButton>
+        <ListItemButton onClick={() => navigateTo('/contact')}>
+          <ListItemIcon><MailIcon /></ListItemIcon>
+          <ListItemText primary="Contact Us" />
+        </ListItemButton>
         {isAdmin && (
           <>
             <ListItemButton onClick={() => navigateTo('/admin/submissions')}>
@@ -176,6 +181,10 @@ export default function Header() {
         <MenuItem onClick={() => navigateTo('/about')}>
           <ListItemIcon><InfoIcon fontSize="small" /></ListItemIcon>
           About
+        </MenuItem>
+        <MenuItem onClick={() => navigateTo('/contact')}>
+          <ListItemIcon><MailIcon fontSize="small" /></ListItemIcon>
+          Contact Us
         </MenuItem>
         {isAdmin && (
           <>

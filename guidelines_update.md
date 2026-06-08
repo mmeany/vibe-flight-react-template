@@ -9,6 +9,7 @@ Use this file (and linked guides) to bring an **existing fork** of `vibe-flight-
 | [update.md](update.md) | Frontend only | `/` is still the signed-in dashboard; guests go to `/login` |
 | **Rolling log files** ([below](#rolling-log-files-backend-only)) | Backend only (~10 min) | Single growing `app.log`, or logs under `app/logs/` instead of deploy-root `logs/` |
 | **Contact Us + legal + GA4** ([below](#contact-us-legal-pages-cookie-consent-and-ga4)) | Full-stack | Missing contact form, SMTP, rate limits, `/terms`, cookie banner, admin submissions |
+| **Authenticated Contact Us + security footer** ([below](#authenticated-contact-us-and-dashboard-security-footer)) | Full-stack (~20 min) | Logged-in users have no `/contact` page; dashboard footer is version-only; no authenticated contact API |
 | **Admin submissions list UX** ([below](#admin-submissions-search-sort-and-pagination)) | Full-stack (~30 min) | `/admin/submissions` lists all rows on one page; no search, column sort, status filter, or pagination controls |
 | **Admin users list UX** ([below](#admin-users-search-sort-and-pagination)) | Full-stack (~30 min) | `/admin/users` Manage tab loads every user in one request; no search, column sort, or pagination controls |
 | **Email-verified registration** ([below](#email-verified-registration)) | Full-stack | Registration is single-step (`POST /register` creates user immediately); no email verification, human check, or admin notify on sign-up |
@@ -513,6 +514,158 @@ Contact submit body:
 | DB error on boot | Migration failed | Check `schema_migrations` table; verify SQL ran |
 | GA on localhost | Expected — GA disabled outside production | Test with production build + `VITE_GA_MEASUREMENT_ID` |
 | `backend/.env` still used | AppConfig fallback | Move all vars to root `.env` |
+
+---
+
+## Authenticated Contact Us and dashboard security footer
+
+Apply this section to forks that already have the public contact form and JWT auth, but logged-in users cannot reach Contact Us (public landing is guest-only) and the dashboard shows a version-only footer.
+
+**Scope:** full-stack — new authenticated contact API, protected `/contact` page, dashboard `SecurityFooter`, Header nav. No database migration or new npm/composer packages.
+
+Requires the [Contact Us + legal + GA4](#contact-us-legal-pages-cookie-consent-and-ga4) section (or equivalent contact infrastructure) first.
+
+---
+
+### What this update adds
+
+| Area | Capability |
+|------|------------|
+| Authenticated contact | Protected `/contact` page — category + message only (no CAPTCHA) |
+| Identity mapping | Backend fills `firstname`, `surname`, `known_as`, `email` from user record |
+| Security footer | Dashboard-only fixed footer: Contact Us link, Cookie preferences, version |
+| Navigation | Contact Us in Header drawer + avatar menu |
+
+```mermaid
+flowchart LR
+  dashboard[Dashboard] --> footer[SecurityFooter]
+  footer --> contactPage["/contact"]
+  header[Header nav] --> contactPage
+  contactPage --> api["POST /api/v1/contact/authenticated"]
+  api --> submissions[(submissions)]
+```
+
+---
+
+### Breaking / behavioural changes
+
+| Before | After |
+|--------|--------|
+| Dashboard footer shows version only | `SecurityFooter` with Contact Us + cookie preferences + version |
+| Contact only on public landing | Logged-in users reach `/contact` via Header and dashboard footer |
+| All contact submits require CAPTCHA | Authenticated path skips challenge; public `POST /contact` unchanged |
+
+---
+
+### New backend files to copy
+
+| File | Role |
+|------|------|
+| `app/DTOs/AuthenticatedSubmissionCreateDto.php` | Authenticated contact payload DTO |
+| `tests/ContactServiceAuthenticatedTest.php` | Field mapping + validation tests |
+
+---
+
+### Patch existing backend files
+
+#### `app/Controllers/ContactController.php`
+
+- Add `submitAuthenticated()` — read `user_id` from `$_REQUEST` (set by `JwtMiddleware`); parse `category` and `question` from body.
+
+#### `app/Services/ContactService.php`
+
+- Inject `UserRepository`.
+- Add `submitAuthenticated(int $userId, AuthenticatedSubmissionCreateDto $dto)`:
+  - Load user; 404 if missing.
+  - `firstname` / `known_as` = `settings.user_alias` or `username`; `surname` = `"—"`; `email` = `user.email`.
+  - Validate category and question length; **skip** challenge; **keep** rate limits.
+  - Insert via `SubmissionRepository` and send auto-ack email as public path.
+
+#### `app/Config/routes.php`
+
+Add inside the JWT group (with `/me`, `/settings`):
+
+```
+POST /api/v1/contact/authenticated
+```
+
+#### `app/Config/services.php`
+
+- Add `UserRepository` to `ContactService` constructor wiring.
+
+---
+
+### New frontend files to copy
+
+| File | Role |
+|------|------|
+| `src/components/SecurityFooter.jsx` | Dashboard footer (Contact Us, cookies, version) |
+| `src/components/AuthenticatedContactForm.jsx` | Simplified contact form for logged-in users |
+| `src/pages/ContactPage.jsx` | Protected `/contact` page |
+
+---
+
+### Patch existing frontend files
+
+#### `src/content/siteContent.js`
+
+- Add `AUTHENTICATED_CONTACT_FORM` copy constants.
+
+#### `src/api/contact.js`
+
+- Add `submitAuthenticatedContact()` using authenticated `apiClient`.
+
+#### `src/App.jsx`
+
+- Register protected `/contact` route under `Layout`.
+
+#### `src/pages/DashboardPage.jsx`
+
+- Replace inline version footer with `<SecurityFooter />`.
+
+#### `src/components/Header.jsx`
+
+- Add **Contact Us** nav item (Mail icon) in drawer and avatar menu, after **About**.
+
+---
+
+### API reference
+
+| Method | Path | Auth | Response |
+|--------|------|------|----------|
+| `POST` | `/api/v1/contact/authenticated` | JWT | 201 / 401 / 404 / 422 / 429 |
+
+Authenticated submit body:
+
+```json
+{
+  "category": "general_enquiry",
+  "question": "..."
+}
+```
+
+Identity fields are resolved server-side from the authenticated user — not sent by the client.
+
+---
+
+### Verification checklist
+
+- [ ] Logged-in user sees security footer on `/dashboard` (Contact Us, Cookie preferences, version)
+- [ ] Header menu and footer both link to `/contact`
+- [ ] Authenticated form submits without CAPTCHA; submission appears in admin with mapped name fields
+- [ ] `POST /contact/authenticated` without JWT returns 401
+- [ ] Public landing contact form still requires CAPTCHA (regression)
+- [ ] `composer test` passes (including `ContactServiceAuthenticatedTest`)
+
+---
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Contact Us link redirects to dashboard | Route not registered or missing `ProtectedRoute` | Add `/contact` under `Layout` in `App.jsx` |
+| 401 on authenticated submit | Missing/expired JWT | Re-login; confirm `apiClient` sends Bearer header |
+| Submission shows `—` as surname | Expected for authenticated path | Identity mapped from `user_alias`/`username` |
 
 ---
 
@@ -1238,7 +1391,7 @@ Copy files from the upstream template commit that introduced this update:
 | Doc | Purpose |
 |-----|---------|
 | [guideline.md](guideline.md) | Feature spec and design rationale |
-| [guidelines_update.md](guidelines_update.md) | Migration hub: rolling logs + contact/legal/GA4 + admin submissions list UX + admin users list UX + scrollbar-stable MUI overlays + email-verified registration |
+| [guidelines_update.md](guidelines_update.md) | Migration hub: rolling logs + contact/legal/GA4 + authenticated contact/security footer + admin submissions list UX + admin users list UX + scrollbar-stable MUI overlays + email-verified registration |
 | [update.md](update.md) | Guest landing page routing (prerequisite for some forks) |
 | [DEPLOY.md](DEPLOY.md) | Production build, env vars, log paths |
 

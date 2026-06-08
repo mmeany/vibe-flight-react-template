@@ -1,3 +1,5 @@
+import apiClient from './client';
+
 const API_BASE = `${import.meta.env.BASE_URL}api/v1`;
 
 async function parseResponse(response) {
@@ -21,4 +23,9 @@ export async function submitContact(body) {
     body: JSON.stringify(body),
   });
   return parseResponse(response);
+}
+
+export async function submitAuthenticatedContact({ category, question }) {
+  const response = await apiClient.post('/contact/authenticated', { category, question });
+  return response.data.data;
 }
