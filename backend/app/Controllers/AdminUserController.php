@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\DTOs\UserListQuery;
 use App\Http\Response;
 use App\Services\UserAdminService;
 
@@ -46,9 +47,18 @@ class AdminUserController
 
     public function index(): void
     {
-        $includeInactive = filter_var($_GET['include_inactive'] ?? '0', FILTER_VALIDATE_BOOLEAN);
-        $users = $this->userAdminService->listUsers($includeInactive);
-        Response::success(array_map(static fn ($user) => $user->toArray(), $users));
+        $query = UserListQuery::fromRequestParams($_GET);
+        $result = $this->userAdminService->listUsers($query);
+        Response::successWithMeta(
+            array_map(static fn ($user) => $user->toArray(), $result['items']),
+            [
+                'total' => $result['total'],
+                'page' => $query->page,
+                'per_page' => $query->perPage,
+                'sort' => $result['sort'],
+                'order' => $result['order'],
+            ],
+        );
     }
 
     public function show(string $id): void

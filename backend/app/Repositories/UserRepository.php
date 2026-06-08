@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Repositories;
 
 use App\Database\Database;
+use App\DTOs\UserListQuery;
 use App\Models\User;
 use PDO;
 
@@ -154,6 +155,80 @@ class UserRepository
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         return array_map(fn (array $row) => $this->hydrate($row), $rows);
+    }
+
+    /**
+     * @return User[]
+     */
+    public function findPaginated(UserListQuery $query): array
+    {
+        $where = $this->buildWhereClause($query);
+        $sql = 'SELECT * FROM users'
+            . $where['sql']
+            . $this->buildOrderClause($query)
+            . ' LIMIT :limit OFFSET :offset';
+
+        $stmt = $this->db->getPdo()->prepare($sql);
+        foreach ($where['params'] as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->bindValue(':limit', $query->perPage, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $query->offset(), PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        return array_map(fn (array $row) => $this->hydrate($row), $rows);
+    }
+
+    public function countPaginated(UserListQuery $query): int
+    {
+        $where = $this->buildWhereClause($query);
+        $sql = 'SELECT COUNT(*) FROM users' . $where['sql'];
+        $stmt = $this->db->getPdo()->prepare($sql);
+        foreach ($where['params'] as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->execute();
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * @return array{sql: string, params: array<string, string>}
+     */
+    private function buildWhereClause(UserListQuery $query): array
+    {
+        $conditions = [];
+        $params = [];
+
+        if (!$query->includeInactive) {
+            $conditions[] = 'deleted_at IS NULL';
+        }
+
+        if ($query->search !== '') {
+            $conditions[] = '(username LIKE :search'
+                . ' OR email LIKE :search'
+                . " OR JSON_UNQUOTE(JSON_EXTRACT(settings, '$.user_alias')) LIKE :search)";
+            $params[':search'] = '%' . $query->search . '%';
+        }
+
+        $sql = $conditions === [] ? '' : ' WHERE ' . implode(' AND ', $conditions);
+
+        return ['sql' => $sql, 'params' => $params];
+    }
+
+    private function buildOrderClause(UserListQuery $query): string
+    {
+        $direction = $query->order === 'asc' ? 'ASC' : 'DESC';
+
+        $primarySort = match ($query->sort) {
+            'email' => 'email ' . $direction,
+            'user_alias' => "JSON_UNQUOTE(JSON_EXTRACT(settings, '$.user_alias')) " . $direction,
+            default => 'username ' . $direction,
+        };
+
+        return ' ORDER BY ' . $primarySort . ', id ASC';
     }
 
     public function update(

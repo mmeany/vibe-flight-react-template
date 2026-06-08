@@ -10,6 +10,7 @@ Use this file (and linked guides) to bring an **existing fork** of `vibe-flight-
 | **Rolling log files** ([below](#rolling-log-files-backend-only)) | Backend only (~10 min) | Single growing `app.log`, or logs under `app/logs/` instead of deploy-root `logs/` |
 | **Contact Us + legal + GA4** ([below](#contact-us-legal-pages-cookie-consent-and-ga4)) | Full-stack | Missing contact form, SMTP, rate limits, `/terms`, cookie banner, admin submissions |
 | **Admin submissions list UX** ([below](#admin-submissions-search-sort-and-pagination)) | Full-stack (~30 min) | `/admin/submissions` lists all rows on one page; no search, column sort, status filter, or pagination controls |
+| **Admin users list UX** ([below](#admin-users-search-sort-and-pagination)) | Full-stack (~30 min) | `/admin/users` Manage tab loads every user in one request; no search, column sort, or pagination controls |
 | **Email-verified registration** ([below](#email-verified-registration)) | Full-stack | Registration is single-step (`POST /register` creates user immediately); no email verification, human check, or admin notify on sign-up |
 
 Apply guides **independently** — you do not need the contact update to apply rolling logs, and vice versa.
@@ -702,6 +703,183 @@ Status chips (New / Replied / Ignored) are unchanged — see [Step 7 — AdminSu
 | Page 2 empty but total > per_page | Frontend not passing `page` | Wire `TablePagination` `onPageChange` to API `page` (1-based) |
 | Row stays visible after ignore with **New** filter | No refetch on filtered view | Refetch when `statusFilter !== 'all'` after ignore/reply |
 | Sort by status looks random | Missing secondary sort | Append `id DESC` after status `CASE` |
+
+---
+
+## Admin users search, sort, and pagination
+
+Apply this section to forks that already have the admin user management UI (`/admin/users` — Create, Import CSV, Manage tabs) but the **Manage** tab loads every user in a single `GET /admin/users` response with no search, sort controls, or pagination bar.
+
+**Scope:** full-stack — `UserListQuery` DTO, `UserRepository`, `UserAdminService`, `AdminUserController`, `adminUsers.js`, `AdminUsersPage.jsx`, and new backend tests. No database migration or new npm/composer packages.
+
+Requires an existing admin users API (`GET /api/v1/admin/users` with `include_inactive`). Unlike [Admin submissions list UX](#admin-submissions-search-sort-and-pagination), this update adds **server-side** pagination and search to the users list endpoint (today it returns the full `User[]` array). Create, import, edit, deactivate, and restore flows are unchanged.
+
+---
+
+### What changes
+
+| Before | After |
+|--------|--------|
+| `GET /admin/users` returns `{ data: User[] }` — all rows | `{ data: User[], meta: { total, page, per_page, sort, order } }` via `Response::successWithMeta` |
+| `ORDER BY id ASC` only | Clickable sort on **Username**, **Email**, **Alias** |
+| No search | Debounced search (~300 ms) on **username**, **email**, **alias** (min 2 chars) |
+| No pagination bar | MUI `TablePagination` — rows/page **10**, **25**, **50** (default 25) |
+| "Show inactive" checkbox only | Same toggle; combined server-side with search/sort/pagination |
+| Create / Import CSV tabs | Unchanged |
+
+```mermaid
+flowchart LR
+  subgraph ui [AdminUsersPage Manage tab]
+    search[Search field]
+    inactive[Show inactive checkbox]
+    sort[TableSortLabel headers]
+    pager[TablePagination]
+  end
+  subgraph api [GET /admin/users]
+    q[search sort order page per_page include_inactive]
+  end
+  search --> q
+  inactive --> q
+  sort --> q
+  pager --> q
+```
+
+**Out of scope (v1):** URL query-string sync, sortable ID/Status columns, frontend component tests, full-text search indexes.
+
+---
+
+### API — extended query parameters
+
+`GET /api/v1/admin/users` (Admin JWT). Existing `include_inactive` unchanged; new optional params:
+
+| Param | Values | Default | Notes |
+|-------|--------|---------|-------|
+| `search` | string | — | Min 2 characters server-side; empty or omitted = no text filter |
+| `sort` | `username`, `email`, `user_alias` | `username` | Unknown values fall back to `username` |
+| `order` | `asc`, `desc` | `asc` | Unknown values fall back to `asc` |
+| `page` | int ≥ 1 | `1` | 1-based |
+| `per_page` | int 1–100 | `25` | |
+| `include_inactive` | bool | `false` | When `false`, `deleted_at IS NULL` only |
+
+**Search** matches (case-sensitive `LIKE %term%`):
+
+- `users.username`
+- `users.email`
+- `JSON_UNQUOTE(JSON_EXTRACT(settings, '$.user_alias'))`
+
+**Sort by alias** uses `JSON_UNQUOTE(JSON_EXTRACT(settings, '$.user_alias'))` — not a top-level column.
+
+Always append `id ASC` as a secondary sort for stable pagination.
+
+Response `meta` includes `total`, `page`, `per_page`, `sort`, and `order`.
+
+**Breaking change:** `listUsers()` consumers must read `response.data.data` as the current page and `response.data.meta.total` for the filtered count. Only `AdminUsersPage` uses this endpoint in the template.
+
+---
+
+### Step 1 — Copy new backend DTO
+
+| File | Role |
+|------|------|
+| `app/DTOs/UserListQuery.php` | Readonly value object with `fromRequestParams($_GET)` — allowlists for `sort` / `order`, `per_page` cap 100, search cleared when &lt; 2 chars, `offset()` helper |
+
+Mirror [`SubmissionListQuery.php`](backend/app/DTOs/SubmissionListQuery.php).
+
+---
+
+### Step 2 — Patch backend files
+
+#### `app/Repositories/UserRepository.php`
+
+- Add private `buildWhereClause(UserListQuery)` used by **both** `findPaginated()` and `countPaginated()`.
+- `include_inactive = false` → `deleted_at IS NULL`.
+- Search clause: `username LIKE :search OR email LIKE :search OR JSON_UNQUOTE(JSON_EXTRACT(settings, '$.user_alias')) LIKE :search`.
+- Add private `buildOrderClause(UserListQuery)` with allowlisted columns; tie-break `id ASC`.
+- `findPaginated()` → hydrate `User[]`; keep existing `findAll()` if still used elsewhere.
+
+#### `app/Services/UserAdminService.php`
+
+- Replace `listUsers(bool $includeInactive): User[]` with `listUsers(UserListQuery $query): array{items: User[], total: int, sort: string, order: string}`.
+
+#### `app/Controllers/AdminUserController.php`
+
+- `index()`: parse query via `UserListQuery::fromRequestParams($_GET)`; return `Response::successWithMeta($items, $meta)`.
+
+---
+
+### Step 3 — Copy new backend tests
+
+| File | Role |
+|------|------|
+| `tests/UserListQueryTest.php` | DTO validation — invalid sort, short search, page bounds |
+| `tests/UserRepositoryListTest.php` | Asserts SQL fragments for search, inactive filter, sort, and pagination bindings (mocked PDO — same style as `SubmissionRepositoryTest.php`) |
+
+---
+
+### Step 4 — Patch frontend files
+
+#### `src/api/adminUsers.js`
+
+Extend `listUsers()`:
+
+```js
+listUsers({
+  page = 1,
+  perPage = 25,
+  includeInactive = false,
+  search = '',
+  sort = 'username',
+  order = 'asc',
+} = {})
+```
+
+Map to snake_case query params: `search`, `sort`, `order`, `page`, `per_page`, `include_inactive`.
+
+Return `{ items: response.data.data, meta: response.data.meta }`.
+
+#### `src/pages/AdminUsersPage.jsx` — `UsersTable` only
+
+| UI element | Behaviour |
+|------------|-----------|
+| Search `TextField` | Debounce ~300 ms; only search when empty or length ≥ 2; clear (×) button; placeholder "Username, email, or alias"; resets `page` to 1 |
+| "Show inactive" checkbox | Unchanged — resets `page` to 1 |
+| `TableSortLabel` | On Username, Email, Alias; toggles asc/desc; new column defaults to `asc`; resets `page` to 1 |
+| `TablePagination` | Below table; `rowsPerPageOptions={[10, 25, 50]}`; MUI page is 0-based, API is 1-based |
+| Header count | `{meta.total} user(s)` — filtered total, not current page length |
+| ID / Status columns | Display only — not sortable |
+| Edit / deactivate / restore | Call `loadUsers()` after success; stay on current page |
+
+**Fetch:** single `loadUsers` callback (same pattern as `loadSubmissions` on the admin submissions page). `useEffect` depends on `includeInactive`, `page`, `perPage`, debounced search, `sort`, and `order`.
+
+**URL state:** React state only — list params are **not** synced to the browser URL in v1.
+
+Create and Import CSV tabs are unchanged. The Manage tab still remounts via `refreshKey` after create/import so the list picks up new users.
+
+---
+
+### Verification checklist
+
+- [ ] `composer test` passes in `backend/` (includes `UserListQueryTest` and `UserRepositoryListTest`)
+- [ ] Default load: page 1, 25 rows, `username asc`
+- [ ] Pagination: next/prev, change rows per page, `meta.total` updates
+- [ ] Search debounces; fewer than 2 characters clears the filter; matches username, email, and alias
+- [ ] Sort: Username, Email, and Alias each toggle asc/desc
+- [ ] "Show inactive" still filters server-side; works combined with search and sort
+- [ ] Create user or CSV import refreshes Manage tab list
+- [ ] Edit, deactivate, and restore still work; list refetches on current page
+
+---
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Frontend shows `undefined` users | Still treating response as bare array | Read `items` from `listUsers()` return value; use `meta.total` for pagination count |
+| Total count wrong after search | `countPaginated()` missing shared WHERE | Use same `buildWhereClause()` for list and count |
+| Search misses alias | Wrong JSON key | Match `$.user_alias` in `settings`, not `username` |
+| Sort by alias looks random | NULL aliases sort inconsistently | Expected — secondary `id ASC` stabilizes order; document for admins |
+| Page 2 empty but total > per_page | Frontend not passing `page` | Wire `TablePagination` `onPageChange` to API `page` (1-based) |
+| All users still load at once | Backend not updated | Ensure controller uses `findPaginated` + `LIMIT`/`OFFSET`, not `findAll()` |
 
 ---
 

@@ -1,11 +1,28 @@
 import apiClient from './client';
 import { TOKEN_KEY } from './storage';
 
-export async function listUsers(includeInactive = false) {
+export async function listUsers({
+  page = 1,
+  perPage = 25,
+  includeInactive = false,
+  search = '',
+  sort = 'username',
+  order = 'asc',
+} = {}) {
   const response = await apiClient.get('/admin/users', {
-    params: { include_inactive: includeInactive ? 1 : 0 },
+    params: {
+      page,
+      per_page: perPage,
+      include_inactive: includeInactive ? 1 : 0,
+      search: search || undefined,
+      sort,
+      order,
+    },
   });
-  return response.data.data;
+  return {
+    items: response.data.data,
+    meta: response.data.meta,
+  };
 }
 
 export async function createUser({ username, email, password, password_reminder, user_alias }) {

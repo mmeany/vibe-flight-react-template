@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\DTOs\UserListQuery;
 use App\Http\Response;
 use App\Models\User;
 use App\Repositories\UserRepository;
@@ -124,11 +125,19 @@ class UserAdminService
     }
 
     /**
-     * @return User[]
+     * @return array{items: User[], total: int, sort: string, order: string}
      */
-    public function listUsers(bool $includeInactive): array
+    public function listUsers(UserListQuery $query): array
     {
-        return $this->userRepository->findAll($includeInactive);
+        $items = $this->userRepository->findPaginated($query);
+        $total = $this->userRepository->countPaginated($query);
+
+        return [
+            'items' => $items,
+            'total' => $total,
+            'sort' => $query->sort,
+            'order' => $query->order,
+        ];
     }
 
     public function getUser(int $id): User

@@ -1,6 +1,7 @@
 import {
   Cancel,
   CheckCircle,
+  Clear as ClearIcon,
   Delete,
   Edit,
   Restore,
@@ -17,14 +18,18 @@ import {
   Divider,
   FormControlLabel,
   IconButton,
+  InputAdornment,
   Paper,
+  Stack,
   Tab,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
+  TableSortLabel,
   Tabs,
   TextField,
   Typography,
@@ -291,6 +296,13 @@ function UsersTable() {
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const [users, setUsers] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [sort, setSort] = useState('username');
+  const [order, setOrder] = useState('asc');
   const [includeInactive, setIncludeInactive] = useState(false);
   const [error, setError] = useState('');
   const [editUser, setEditUser] = useState(null);
@@ -298,22 +310,50 @@ function UsersTable() {
 
   const compactCellSx = isSmallScreen ? { py: 0.5, fontSize: '0.8125rem' } : undefined;
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const term = searchInput.trim();
+      const nextSearch = term.length >= 2 ? term : '';
+      setDebouncedSearch(nextSearch);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   const loadUsers = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await listUsers(includeInactive);
-      setUsers(data);
+      const result = await listUsers({
+        page,
+        perPage,
+        includeInactive,
+        search: debouncedSearch,
+        sort,
+        order,
+      });
+      setUsers(result.items);
+      setTotal(result.meta?.total ?? result.items.length);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load users');
     } finally {
       setLoading(false);
     }
-  }, [includeInactive]);
+  }, [page, perPage, includeInactive, debouncedSearch, sort, order]);
 
   useEffect(() => {
     loadUsers();
   }, [loadUsers]);
+
+  const handleSort = (column) => {
+    if (sort === column) {
+      setOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSort(column);
+      setOrder('asc');
+    }
+    setPage(1);
+  };
 
   async function handleDeactivate(user) {
     if (!window.confirm(`Deactivate user "${user.username}"?`)) {
@@ -338,102 +378,174 @@ function UsersTable() {
 
   return (
     <Paper sx={{ p: { xs: 1.5, sm: 3 } }}>
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: { xs: 'column', sm: 'row' },
-          justifyContent: 'space-between',
-          alignItems: { xs: 'stretch', sm: 'center' },
-          gap: { xs: 0.5, sm: 0 },
-          mb: { xs: 1, sm: 2 },
-        }}
-      >
-        <Typography variant="h6">Manage users</Typography>
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={includeInactive}
-              onChange={e => setIncludeInactive(e.target.checked)}
-            />
-          }
-          label="Show inactive"
-        />
+      <Box sx={{ mb: { xs: 1, sm: 2 } }}>
+        <Typography variant="h6" gutterBottom>Manage users</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          {total} user{total === 1 ? '' : 's'}
+        </Typography>
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={2}
+          alignItems={{ xs: 'stretch', sm: 'center' }}
+          flexWrap="wrap"
+        >
+          <TextField
+            label="Search"
+            placeholder="Username, email, or alias"
+            value={searchInput}
+            onChange={event => setSearchInput(event.target.value)}
+            size="small"
+            sx={{ minWidth: 220, flexGrow: 1 }}
+            slotProps={{
+              input: {
+                endAdornment: searchInput ? (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="Clear search"
+                      onClick={() => setSearchInput('')}
+                      edge="end"
+                      size="small"
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null,
+              },
+            }}
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={includeInactive}
+                onChange={e => {
+                  setIncludeInactive(e.target.checked);
+                  setPage(1);
+                }}
+              />
+            }
+            label="Show inactive"
+          />
+        </Stack>
       </Box>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      {loading ? (
-        <Typography color="text.secondary">Loading...</Typography>
-      ) : (
-        <TableContainer sx={{ overflowX: 'auto' }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={compactCellSx}>ID</TableCell>
-                <TableCell sx={compactCellSx}>Username</TableCell>
-                {!isSmallScreen && <TableCell sx={compactCellSx}>Email</TableCell>}
-                <TableCell sx={compactCellSx}>Alias</TableCell>
-                <TableCell sx={compactCellSx} align="center">Status</TableCell>
-                <TableCell sx={compactCellSx} align="right">
-                  {!isSmallScreen && 'Actions'}
+      <TableContainer sx={{ overflowX: 'auto' }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell sx={compactCellSx}>ID</TableCell>
+              <TableCell sx={compactCellSx} sortDirection={sort === 'username' ? order : false}>
+                <TableSortLabel
+                  active={sort === 'username'}
+                  direction={sort === 'username' ? order : 'asc'}
+                  onClick={() => handleSort('username')}
+                >
+                  Username
+                </TableSortLabel>
+              </TableCell>
+              {!isSmallScreen && (
+                <TableCell sx={compactCellSx} sortDirection={sort === 'email' ? order : false}>
+                  <TableSortLabel
+                    active={sort === 'email'}
+                    direction={sort === 'email' ? order : 'asc'}
+                    onClick={() => handleSort('email')}
+                  >
+                    Email
+                  </TableSortLabel>
                 </TableCell>
+              )}
+              <TableCell sx={compactCellSx} sortDirection={sort === 'user_alias' ? order : false}>
+                <TableSortLabel
+                  active={sort === 'user_alias'}
+                  direction={sort === 'user_alias' ? order : 'asc'}
+                  onClick={() => handleSort('user_alias')}
+                >
+                  Alias
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sx={compactCellSx} align="center">Status</TableCell>
+              <TableCell sx={compactCellSx} align="right">
+                {!isSmallScreen && 'Actions'}
+              </TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading && (
+              <TableRow>
+                <TableCell colSpan={isSmallScreen ? 5 : 6}>Loading…</TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody>
-              {users.map(user => (
-                <TableRow key={user.id}>
-                  <TableCell sx={compactCellSx}>{user.id}</TableCell>
-                  <TableCell sx={compactCellSx}>{user.username}</TableCell>
-                  {!isSmallScreen && <TableCell sx={compactCellSx}>{user.email}</TableCell>}
-                  <TableCell sx={compactCellSx}>{user.settings?.user_alias || '—'}</TableCell>
-                  <TableCell sx={compactCellSx} align="center">
-                    <Box
-                      component="span"
-                      role="img"
-                      aria-label={user.is_active ? 'Active' : 'Inactive'}
-                      sx={{ display: 'inline-flex', verticalAlign: 'middle' }}
-                    >
-                      {user.is_active ? (
-                        <CheckCircle color="success" fontSize="small" />
-                      ) : (
-                        <Cancel color="error" fontSize="small" />
-                      )}
-                    </Box>
-                  </TableCell>
-                  <TableCell align="right" sx={{ ...compactCellSx, whiteSpace: 'nowrap' }}>
+            )}
+            {!loading && users.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={isSmallScreen ? 5 : 6}>No users found.</TableCell>
+              </TableRow>
+            )}
+            {!loading && users.map(user => (
+              <TableRow key={user.id}>
+                <TableCell sx={compactCellSx}>{user.id}</TableCell>
+                <TableCell sx={compactCellSx}>{user.username}</TableCell>
+                {!isSmallScreen && <TableCell sx={compactCellSx}>{user.email}</TableCell>}
+                <TableCell sx={compactCellSx}>{user.settings?.user_alias || '—'}</TableCell>
+                <TableCell sx={compactCellSx} align="center">
+                  <Box
+                    component="span"
+                    role="img"
+                    aria-label={user.is_active ? 'Active' : 'Inactive'}
+                    sx={{ display: 'inline-flex', verticalAlign: 'middle' }}
+                  >
                     {user.is_active ? (
-                      <>
-                        <IconButton
-                          size="small"
-                          aria-label={`Edit ${user.username}`}
-                          onClick={() => setEditUser(user)}
-                        >
-                          <Edit fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          color="error"
-                          aria-label={`Deactivate ${user.username}`}
-                          onClick={() => handleDeactivate(user)}
-                        >
-                          <Delete fontSize="small" />
-                        </IconButton>
-                      </>
+                      <CheckCircle color="success" fontSize="small" />
                     ) : (
+                      <Cancel color="error" fontSize="small" />
+                    )}
+                  </Box>
+                </TableCell>
+                <TableCell align="right" sx={{ ...compactCellSx, whiteSpace: 'nowrap' }}>
+                  {user.is_active ? (
+                    <>
                       <IconButton
                         size="small"
-                        color="primary"
-                        aria-label={`Restore ${user.username}`}
-                        onClick={() => handleRestore(user)}
+                        aria-label={`Edit ${user.username}`}
+                        onClick={() => setEditUser(user)}
                       >
-                        <Restore fontSize="small" />
+                        <Edit fontSize="small" />
                       </IconButton>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+                      <IconButton
+                        size="small"
+                        color="error"
+                        aria-label={`Deactivate ${user.username}`}
+                        onClick={() => handleDeactivate(user)}
+                      >
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    </>
+                  ) : (
+                    <IconButton
+                      size="small"
+                      color="primary"
+                      aria-label={`Restore ${user.username}`}
+                      onClick={() => handleRestore(user)}
+                    >
+                      <Restore fontSize="small" />
+                    </IconButton>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+      <TablePagination
+        component="div"
+        count={total}
+        page={Math.max(0, page - 1)}
+        onPageChange={(_, nextPage) => setPage(nextPage + 1)}
+        rowsPerPage={perPage}
+        onRowsPerPageChange={event => {
+          setPerPage(parseInt(event.target.value, 10));
+          setPage(1);
+        }}
+        rowsPerPageOptions={[10, 25, 50]}
+      />
       <EditUserDialog
         user={editUser}
         open={Boolean(editUser)}
