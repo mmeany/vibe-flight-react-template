@@ -12,6 +12,7 @@ Use this file (and linked guides) to bring an **existing fork** of `vibe-flight-
 | **Admin submissions list UX** ([below](#admin-submissions-search-sort-and-pagination)) | Full-stack (~30 min) | `/admin/submissions` lists all rows on one page; no search, column sort, status filter, or pagination controls |
 | **Admin users list UX** ([below](#admin-users-search-sort-and-pagination)) | Full-stack (~30 min) | `/admin/users` Manage tab loads every user in one request; no search, column sort, or pagination controls |
 | **Email-verified registration** ([below](#email-verified-registration)) | Full-stack | Registration is single-step (`POST /register` creates user immediately); no email verification, human check, or admin notify on sign-up |
+| **Scrollbar-stable layout (MUI overlays)** ([below](#scrollbar-stable-layout-mui-overlays)) | Frontend only (~5 min) | Page layout shifts horizontally when opening menus, dialogs, or drawers; or fork lacks `scrollbar-gutter` + MUI scroll-lock pairing |
 
 Apply guides **independently** — you do not need the contact update to apply rolling logs, and vice versa.
 
@@ -883,6 +884,122 @@ Create and Import CSV tabs are unchanged. The Manage tab still remounts via `ref
 
 ---
 
+## Scrollbar-stable layout (MUI overlays)
+
+Apply this section to forks where the page **twitches horizontally** when opening MUI overlays (`Menu`, `Dialog`, `Drawer`, `Select` dropdowns) — even if page-to-page navigation already feels stable.
+
+**Scope:** frontend only — `frontend/src/index.css` and `frontend/src/contexts/ThemeContext.jsx`. No backend, database, or dependency changes.
+
+---
+
+### What changes
+
+| Before | After |
+|--------|--------|
+| `scrollbar-gutter: stable` on `html` only | Same, wrapped in `@supports`; paired with overlay scroll lock |
+| MUI `ModalManager` adds `padding-right` when overlays open | `disableScrollLock: true` on `MuiModal` and `MuiPopover` — no `padding-right` hack |
+| Double compensation → layout shift on menu/dialog open | Gutter space reserved; background scroll blocked via CSS only |
+| Per-component workaround | Central theme + global CSS — covers all current and future overlays |
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant MUI as MuiModal
+    participant HTML as html_scrollbarGutter
+    participant Body as body
+
+    User->>MUI: Open Menu/Dialog
+    Note over HTML: scrollbar-gutter reserves gutter space
+    Note over MUI: disableScrollLock — no padding-right
+    Body->>Body: overflow hidden via CSS :has
+    Note over Body: layout stays stable
+```
+
+**Root cause:** `scrollbar-gutter: stable` already reserves scrollbar width on `html`. MUI's default scroll lock also adds `padding-right` equal to the scrollbar width when a modal opens — double compensation causes the twitch.
+
+**Components affected:** `Dialog`, `Drawer` (via `MuiModal`); `Menu` and `Select` dropdowns (via `MuiPopover` → `Modal`).
+
+---
+
+### Step 1 — `frontend/src/index.css`
+
+Replace a bare `html { scrollbar-gutter: stable; }` rule with:
+
+```css
+/* Reserve scrollbar width so layout does not shift between short and long pages */
+@supports (scrollbar-gutter: stable) {
+  html {
+    scrollbar-gutter: stable;
+  }
+
+  /* Prevent background scroll without MUI's padding-right compensation */
+  body:has(.MuiModal-root) {
+    overflow: hidden;
+  }
+}
+```
+
+- `scrollbar-gutter: stable` prevents shift when navigating between short and long pages.
+- `body:has(.MuiModal-root)` re-applies background scroll lock without MUI's `padding-right` compensation.
+- `:has()` tracks any open overlay (menu, dialog, drawer) including exit transitions while the modal node is still mounted.
+
+---
+
+### Step 2 — `frontend/src/contexts/ThemeContext.jsx`
+
+Inside `createTheme()`, add component defaults:
+
+```js
+components: {
+  MuiModal: {
+    defaultProps: {
+      disableScrollLock: true,
+    },
+  },
+  MuiPopover: {
+    defaultProps: {
+      disableScrollLock: true,
+    },
+  },
+},
+```
+
+- `MuiModal` covers `Dialog` and `Drawer`.
+- `MuiPopover` is required for `Menu` and `Select` — `Popover` passes its own `disableScrollLock` to `Modal` and would otherwise override the theme default.
+
+No per-component `disableScrollLock` props are needed on individual `Dialog` / `Menu` / `Drawer` usages.
+
+---
+
+### Verification checklist
+
+On a page with a vertical scrollbar (e.g. admin users table, long settings page):
+
+- [ ] `npm test` passes in `frontend/`
+- [ ] Navigate between short and long pages — no horizontal shift (scrollbar gutter)
+- [ ] Open avatar **Menu** — no horizontal shift
+- [ ] Open **Logout** dialog — no shift; background does not scroll
+- [ ] On mobile width, open **Drawer** — no shift
+- [ ] Open admin **Edit user** / **Submission** dialogs — no shift
+- [ ] Close each overlay — layout returns without twitch
+- [ ] In DevTools: with overlay open, `body` has `overflow: hidden` and `padding-right: 0` (no inline `padding-right` from MUI)
+
+**Note:** On macOS with overlay scrollbars (hidden until scroll), the effect is most visible with **System Settings → Appearance → Show scroll bars: Always**. Windows/Linux show it more readily.
+
+---
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Twitch on menu/dialog open only | MUI scroll lock still adding `padding-right` | Set `disableScrollLock: true` on **both** `MuiModal` and `MuiPopover` |
+| Background scrolls while dialog open | Missing CSS companion rule | Add `body:has(.MuiModal-root) { overflow: hidden }` inside `@supports` |
+| Twitch between pages, not overlays | Missing `scrollbar-gutter` | Add `html { scrollbar-gutter: stable }` inside `@supports` |
+| Menu still twitches, dialog fine | `MuiPopover` default not set | `Menu` uses `Popover`, not `Modal` directly |
+| No effect in old browser | No `scrollbar-gutter` or `:has()` support | Expected on legacy browsers (~93%+ support); no fallback needed for template targets |
+
+---
+
 ## Email-verified registration
 
 Apply this section to forks that still use **single-step registration** (submitting the sign-up form creates a `users` row immediately, with no email verification).
@@ -1121,7 +1238,7 @@ Copy files from the upstream template commit that introduced this update:
 | Doc | Purpose |
 |-----|---------|
 | [guideline.md](guideline.md) | Feature spec and design rationale |
-| [guidelines_update.md](guidelines_update.md) | Migration hub: rolling logs + contact/legal/GA4 + admin submissions list UX + email-verified registration |
+| [guidelines_update.md](guidelines_update.md) | Migration hub: rolling logs + contact/legal/GA4 + admin submissions list UX + admin users list UX + scrollbar-stable MUI overlays + email-verified registration |
 | [update.md](update.md) | Guest landing page routing (prerequisite for some forks) |
 | [DEPLOY.md](DEPLOY.md) | Production build, env vars, log paths |
 

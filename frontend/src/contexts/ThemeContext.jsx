@@ -69,6 +69,18 @@ export function ThemeProvider({ children }) {
             xl: 1536,
           },
         },
+        components: {
+          MuiModal: {
+            defaultProps: {
+              disableScrollLock: true,
+            },
+          },
+          MuiPopover: {
+            defaultProps: {
+              disableScrollLock: true,
+            },
+          },
+        },
       }),
     [themeMode]
   );

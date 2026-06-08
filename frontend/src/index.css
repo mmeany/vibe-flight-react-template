@@ -1,4 +1,11 @@
 /* Reserve scrollbar width so layout does not shift between short and long pages */
-html {
-  scrollbar-gutter: stable;
+@supports (scrollbar-gutter: stable) {
+  html {
+    scrollbar-gutter: stable;
+  }
+
+  /* Prevent background scroll without MUI's padding-right compensation */
+  body:has(.MuiModal-root) {
+    overflow: hidden;
+  }
 }
