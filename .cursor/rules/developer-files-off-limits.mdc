@@ -1,0 +1,11 @@
+---
+description: Never read or reference .developer_files/
+alwaysApply: true
+---
+
+# Developer files are off limits
+
+- Do **not** read, search, grep, or @-mention any file under `.developer_files/`.
+- Do **not** run terminal commands to access `.developer_files/` (e.g. `cat`, `grep`, `php .developer_files/...`).
+- If a task seems to require those files, ask the user instead of accessing them.
+- These are local-only utilities (e.g. password helpers); the app does not depend on them.
